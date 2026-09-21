@@ -228,12 +228,22 @@ async def generate_interview_pdf(report_data: dict, template_id: int = 1) -> byt
     star_eval = comm_eval.get("star_evaluation")
     if star_eval:
         elements.append(Spacer(1, 4))
+        sit_status = '<font color="#16a34a"><b>Detected</b></font>' if star_eval.get('situation', {}).get('detected') else '<font color="#dc2626"><b>Missing</b></font>'
+        task_status = '<font color="#16a34a"><b>Detected</b></font>' if star_eval.get('task', {}).get('detected') else '<font color="#dc2626"><b>Missing</b></font>'
+        act_status = '<font color="#16a34a"><b>Detected</b></font>' if star_eval.get('action', {}).get('detected') else '<font color="#dc2626"><b>Missing</b></font>'
+        res_status = '<font color="#16a34a"><b>Detected</b></font>' if star_eval.get('result', {}).get('detected') else '<font color="#dc2626"><b>Missing</b></font>'
+
+        sit_sum = star_eval.get('situation', {}).get('summary', '')
+        task_sum = star_eval.get('task', {}).get('summary', '')
+        act_sum = star_eval.get('action', {}).get('summary', '')
+        res_sum = star_eval.get('result', {}).get('summary', '')
+
         star_rows = [
             [
-                Paragraph(f"<b>Situation:</b> {'<font color=\"#16a34a\"><b>Detected</b></font>' if star_eval.get('situation', {}).get('detected') else '<font color=\"#dc2626\"><b>Missing</b></font>'}<br/><font color='#64748b' size='7.5'>{star_eval.get('situation', {}).get('summary', '')}</font>", S('st1', fontName='Helvetica', fontSize=8, leading=10)),
-                Paragraph(f"<b>Task:</b> {'<font color=\"#16a34a\"><b>Detected</b></font>' if star_eval.get('task', {}).get('detected') else '<font color=\"#dc2626\"><b>Missing</b></font>'}<br/><font color='#64748b' size='7.5'>{star_eval.get('task', {}).get('summary', '')}</font>", S('st2', fontName='Helvetica', fontSize=8, leading=10)),
-                Paragraph(f"<b>Action:</b> {'<font color=\"#16a34a\"><b>Detected</b></font>' if star_eval.get('action', {}).get('detected') else '<font color=\"#dc2626\"><b>Missing</b></font>'}<br/><font color='#64748b' size='7.5'>{star_eval.get('action', {}).get('summary', '')}</font>", S('st3', fontName='Helvetica', fontSize=8, leading=10)),
-                Paragraph(f"<b>Result:</b> {'<font color=\"#16a34a\"><b>Detected</b></font>' if star_eval.get('result', {}).get('detected') else '<font color=\"#dc2626\"><b>Missing</b></font>'}<br/><font color='#64748b' size='7.5'>{star_eval.get('result', {}).get('summary', '')}</font>", S('st4', fontName='Helvetica', fontSize=8, leading=10)),
+                Paragraph(f"<b>Situation:</b> {sit_status}<br/><font color='#64748b' size='7.5'>{sit_sum}</font>", S('st1', fontName='Helvetica', fontSize=8, leading=10)),
+                Paragraph(f"<b>Task:</b> {task_status}<br/><font color='#64748b' size='7.5'>{task_sum}</font>", S('st2', fontName='Helvetica', fontSize=8, leading=10)),
+                Paragraph(f"<b>Action:</b> {act_status}<br/><font color='#64748b' size='7.5'>{act_sum}</font>", S('st3', fontName='Helvetica', fontSize=8, leading=10)),
+                Paragraph(f"<b>Result:</b> {res_status}<br/><font color='#64748b' size='7.5'>{res_sum}</font>", S('st4', fontName='Helvetica', fontSize=8, leading=10)),
             ]
         ]
         t_star = Table(star_rows, colWidths=[133, 134, 134, 134])
