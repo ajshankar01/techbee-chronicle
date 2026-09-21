@@ -234,19 +234,21 @@ def send_batch_invitations(
     else:
         ports_to_try.append(465)
 
+    conn_errors = []
     for port in ports_to_try:
         try:
             logger.info(f"Connecting to SMTP server {settings.SMTP_HOST}:{port}...")
             if port == 465:
-                smtp = smtplib.SMTP_SSL(settings.SMTP_HOST, 465, timeout=15)
+                smtp = smtplib.SMTP_SSL(settings.SMTP_HOST, 465, timeout=12)
             else:
-                smtp = smtplib.SMTP(settings.SMTP_HOST, port, timeout=15)
+                smtp = smtplib.SMTP(settings.SMTP_HOST, port, timeout=12)
                 smtp.ehlo()
                 smtp.starttls()
             smtp.login(settings.SMTP_USER, settings.SMTP_PASS)
             logger.info(f"Connected to SMTP {settings.SMTP_HOST}:{port} successfully.")
             break
         except Exception as conn_err:
+            conn_errors.append(f"Port {port}: {type(conn_err).__name__}: {str(conn_err)}")
             logger.warning(f"Failed to connect to SMTP {settings.SMTP_HOST}:{port}: {conn_err}")
             if smtp:
                 try:
@@ -256,7 +258,7 @@ def send_batch_invitations(
             smtp = None
 
     if not smtp:
-        err_msg = f"All SMTP connection attempts failed for batch {batch_id} on ports {ports_to_try}"
+        err_msg = f"All SMTP connection attempts failed: {'; '.join(conn_errors)}"
         logger.error(f"❌ {err_msg}")
         return {"sent": 0, "failed": len(sessions), "error": err_msg}
 
