@@ -183,106 +183,105 @@ async def list_s3_assets(
         from sqlalchemy.orm import selectinload
         from pathlib import Path
 
-        async with AsyncSessionLocal() as db:
-            stmt = (
-                select(InterviewSession)
-                .options(
-                    selectinload(InterviewSession.candidate),
-                    selectinload(InterviewSession.report)
-                )
-                .join(Candidate, Candidate.id == InterviewSession.candidate_id)
-                .outerjoin(InterviewReport, InterviewReport.session_id == InterviewSession.id)
-                .outerjoin(InterviewAnalysis, InterviewAnalysis.session_id == InterviewSession.id)
+        stmt = (
+            select(InterviewSession)
+            .options(
+                selectinload(InterviewSession.candidate),
+                selectinload(InterviewSession.report)
             )
-            res_db = await db.execute(stmt)
-            db_sessions = res_db.scalars().all()
+            .join(Candidate, Candidate.id == InterviewSession.candidate_id)
+            .outerjoin(InterviewReport, InterviewReport.session_id == InterviewSession.id)
+            .where(InterviewSession.status == SessionStatus.COMPLETED)
+        )
+        res_db = await db.execute(stmt)
+        db_sessions = res_db.scalars().all()
 
-            for sess in db_sessions:
-                cand = sess.candidate
-                email = cand.email
-                if not email:
-                    continue
-                
-                sess_id_str = str(sess.id).replace("-", "")
-                session_bond_year_map[sess_id_str] = sess.bond_year or 1
-                session_bond_year_map[sess_id_str[:8]] = sess.bond_year or 1
+        for sess in db_sessions:
+            cand = sess.candidate
+            email = cand.email
+            if not email:
+                continue
+            
+            sess_id_str = str(sess.id).replace("-", "")
+            session_bond_year_map[sess_id_str] = sess.bond_year or 1
+            session_bond_year_map[sess_id_str[:8]] = sess.bond_year or 1
 
-                if email not in db_candidates:
-                    join_dt = cand.join_date or datetime.datetime.now(datetime.timezone.utc)
-                    calc_module = cand.calculated_bond_year
+            if email not in db_candidates:
+                join_dt = cand.join_date or datetime.datetime.now(datetime.timezone.utc)
+                calc_module = cand.calculated_bond_year
 
-                    db_candidates[email] = {
+                db_candidates[email] = {
+                    "email":             email,
+                    "sap_id":            cand.employee_id or "",
+                    "candidate_name":    cand.display_name or email.split("@")[0].title(),
+                    "join_date":         join_dt.strftime("%d %b %Y"),
+                    "current_bond_year": calc_module,
+                    "current_module":    f"Module {calc_module}",
+                    "videos":           [],
+                    "reports":          [],
+                    "latest_video_url": None,
+                    "latest_video_ts":  None,
+                    "latest_report_url": None,
+                    "total_size_mb":    0.0,
+                }
+            
+            entry = db_candidates[email]
+            session_id_str = str(sess.id)
+            if sess.started_at:
+                ist_dt = sess.started_at + datetime.timedelta(hours=5, minutes=30)
+                ts_display = ist_dt.strftime("%d %b %Y, %I:%M %p IST")
+                ts_str = ist_dt.strftime("%Y%m%d_%H%M%S")
+            else:
+                ts_display = "11 Aug 2026, 04:00 PM IST"
+                ts_str = "20260811_160000"
+            
+            # Check local cache files
+            local_video = Path("video_cache") / f"{session_id_str}.webm"
+            video_size = round(local_video.stat().st_size / (1024 * 1024), 1) if local_video.exists() else 12.5
+            
+            local_pdf = Path("pdf_cache") / f"{session_id_str}.pdf"
+            pdf_size = round(local_pdf.stat().st_size / 1024, 1) if local_pdf.exists() else 85.0
+
+            video_url = sess.video_recording_url or f"/api/interview/serve-recording/{session_id_str}?token={token_str}"
+            report_url = sess.report.pdf_url if (sess.report and sess.report.pdf_url) else f"/api/reports/serve/{session_id_str}?token={token_str}"
+            
+            # Only add if video file exists locally or in GCS/S3
+            has_video = local_video.exists() or sess.video_recording_url
+            if has_video:
+                if not any(v["session_id"] == session_id_str for v in entry["videos"]):
+                    entry["videos"].append({
                         "email":             email,
-                        "sap_id":            cand.employee_id or "",
-                        "candidate_name":    cand.display_name or email.split("@")[0].title(),
-                        "join_date":         join_dt.strftime("%d %b %Y"),
-                        "current_bond_year": calc_module,
-                        "current_module":    f"Module {calc_module}",
-                        "videos":           [],
-                        "reports":          [],
-                        "latest_video_url": None,
-                        "latest_video_ts":  None,
-                        "latest_report_url": None,
-                        "total_size_mb":    0.0,
-                    }
-                
-                entry = db_candidates[email]
-                session_id_str = str(sess.id)
-                if sess.started_at:
-                    ist_dt = sess.started_at + datetime.timedelta(hours=5, minutes=30)
-                    ts_display = ist_dt.strftime("%d %b %Y, %I:%M %p IST")
-                    ts_str = ist_dt.strftime("%Y%m%d_%H%M%S")
-                else:
-                    ts_display = "11 Aug 2026, 04:00 PM IST"
-                    ts_str = "20260811_160000"
-                
-                # Check local cache files
-                local_video = Path("video_cache") / f"{session_id_str}.webm"
-                video_size = round(local_video.stat().st_size / (1024 * 1024), 1) if local_video.exists() else 12.5
-                
-                local_pdf = Path("pdf_cache") / f"{session_id_str}.pdf"
-                pdf_size = round(local_pdf.stat().st_size / 1024, 1) if local_pdf.exists() else 85.0
+                        "candidate_name":    entry["candidate_name"],
+                        "session_id":        session_id_str,
+                        "timestamp":         ts_str,
+                        "timestamp_display": ts_display,
+                        "size_mb":           video_size,
+                        "presign_url":       video_url,
+                        "bond_year":         cand.calculated_bond_year,
+                        "s3_key":            f"candidates/{email}/videos/{ts_str}_{session_id_str}.webm"
+                    })
+                    entry["total_size_mb"] = round(entry["total_size_mb"] + video_size, 1)
+                    if entry["latest_video_url"] is None:
+                        entry["latest_video_url"] = video_url
+                        entry["latest_video_ts"]  = ts_display
 
-                video_url = sess.video_recording_url or f"/api/interview/serve-recording/{session_id_str}?token={token_str}"
-                report_url = sess.report.pdf_url if (sess.report and sess.report.pdf_url) else f"/api/reports/serve/{session_id_str}?token={token_str}"
-                
-                # Only add if video file exists locally or in GCS/S3
-                has_video = local_video.exists() or sess.video_recording_url
-                if has_video:
-                    if not any(v["session_id"] == session_id_str for v in entry["videos"]):
-                        entry["videos"].append({
-                            "email":             email,
-                            "candidate_name":    entry["candidate_name"],
-                            "session_id":        session_id_str,
-                            "timestamp":         ts_str,
-                            "timestamp_display": ts_display,
-                            "size_mb":           video_size,
-                            "presign_url":       video_url,
-                            "bond_year":         cand.calculated_bond_year,
-                            "s3_key":            f"candidates/{email}/videos/{ts_str}_{session_id_str}.webm"
-                        })
-                        entry["total_size_mb"] = round(entry["total_size_mb"] + video_size, 1)
-                        if entry["latest_video_url"] is None:
-                            entry["latest_video_url"] = video_url
-                            entry["latest_video_ts"]  = ts_display
-
-                # Only add if report PDF exists locally or in GCS/S3
-                has_report = local_pdf.exists() or (sess.report and sess.report.pdf_url)
-                if has_report:
-                    if not any(r["session_id"] == session_id_str for r in entry["reports"]):
-                        entry["reports"].append({
-                            "email":             email,
-                            "candidate_name":    entry["candidate_name"],
-                            "session_id":        session_id_str,
-                            "timestamp":         ts_str,
-                            "timestamp_display": ts_display,
-                            "size_kb":           pdf_size,
-                            "presign_url":       report_url,
-                            "bond_year":         cand.calculated_bond_year,
-                            "s3_key":            f"candidates/{email}/reports/{ts_str}_{session_id_str}.pdf"
-                        })
-                        if entry["latest_report_url"] is None:
-                            entry["latest_report_url"] = report_url
+            # Only add if report PDF exists locally or in GCS/S3
+            has_report = local_pdf.exists() or (sess.report and sess.report.pdf_url)
+            if has_report:
+                if not any(r["session_id"] == session_id_str for r in entry["reports"]):
+                    entry["reports"].append({
+                        "email":             email,
+                        "candidate_name":    entry["candidate_name"],
+                        "session_id":        session_id_str,
+                        "timestamp":         ts_str,
+                        "timestamp_display": ts_display,
+                        "size_kb":           pdf_size,
+                        "presign_url":       report_url,
+                        "bond_year":         cand.calculated_bond_year,
+                        "s3_key":            f"candidates/{email}/reports/{ts_str}_{session_id_str}.pdf"
+                    })
+                    if entry["latest_report_url"] is None:
+                        entry["latest_report_url"] = report_url
 
     except Exception as db_err:
         logger.error(f"Failed to load candidates from local database: {db_err}")

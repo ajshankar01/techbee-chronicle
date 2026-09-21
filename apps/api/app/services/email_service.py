@@ -279,6 +279,23 @@ async def send_batch_invitations(
                     sent_count += 1
                     logger.info(f"✅ Email sent → {candidate_email} (batch {batch_id})")
 
+                    # Update session notes with email_sent_at timestamp in database
+                    try:
+                        from app.core.database import AsyncSessionLocal
+                        from app.models.models import InterviewSession
+                        from sqlalchemy import select
+                        import json as _json
+
+                        async with AsyncSessionLocal() as db_session:
+                            s_row = (await db_session.execute(select(InterviewSession).where(InterviewSession.id == session_id))).scalar_one_or_none()
+                            if s_row:
+                                notes_dict = _json.loads(s_row.notes or "{}")
+                                notes_dict["email_sent_at"] = datetime.now(timezone.utc).isoformat()
+                                s_row.notes = _json.dumps(notes_dict)
+                                await db_session.commit()
+                    except Exception as db_e:
+                        logger.warning(f"Could not update email_sent_at for session {session_id}: {db_e}")
+
                 except Exception as e:
                     failed_count += 1
                     logger.error(f"❌ Failed to send to {session.get('candidate_email', '?')}: {e}")

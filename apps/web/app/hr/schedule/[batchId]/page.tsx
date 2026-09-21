@@ -9,7 +9,24 @@ import {
   AlertCircle, PlayCircle, Mail, BookOpen, Search
 } from 'lucide-react';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API = (process.env.NEXT_PUBLIC_API_URL || 'https://techbee-api.onrender.com').replace(/\/+$/, '');
+
+async function fetchAPI(endpoint: string, init?: RequestInit): Promise<Response> {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  try {
+    const res = await fetch(cleanEndpoint, init);
+    if (res.ok || (res.status < 500 && res.status !== 404)) {
+      return res;
+    }
+    return await fetch(`${API}${cleanEndpoint}`, init);
+  } catch (err) {
+    try {
+      return await fetch(`${API}${cleanEndpoint}`, init);
+    } catch {
+      throw err;
+    }
+  }
+}
 
 interface SessionRow {
   session_id: string;
@@ -101,30 +118,47 @@ export default function BatchDetailPage() {
   const [filter, setFilter] = useState('all');
   const [resending, setResending] = useState(false);
 
+  const [resendStatus, setResendStatus] = useState<string | null>(null);
+
   const token = typeof window !== 'undefined' ? sessionStorage.getItem('teams_token') || 'dev-token' : 'dev-token';
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (isInitial = false) => {
+    if (isInitial) setLoading(true);
     try {
-      const res = await fetch(`${API}/api/hr/batches/${batchId}`, {
+      const res = await fetchAPI(`/api/hr/batches/${batchId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) setBatch(await res.json());
-    } catch {}
-    finally { setLoading(false); }
+    } catch (err) {
+      console.error('Failed to load batch:', err);
+    } finally {
+      if (isInitial) setLoading(false);
+    }
   }, [batchId, token]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(true); }, [load]);
 
   const handleResend = async () => {
     setResending(true);
+    setResendStatus(null);
     try {
-      await fetch(`${API}/api/hr/batches/${batchId}/resend`, {
+      const res = await fetchAPI(`/api/hr/batches/${batchId}/resend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({}),
       });
-      load();
+      if (res.ok) {
+        const data = await res.json();
+        setResendStatus(`Invitations sent successfully to ${data.resent_count || 0} candidate(s)!`);
+        setTimeout(() => setResendStatus(null), 5000);
+      } else {
+        setResendStatus('Failed to resend invitations.');
+        setTimeout(() => setResendStatus(null), 5000);
+      }
+      load(false);
+    } catch (e) {
+      setResendStatus('Network error while resending.');
+      setTimeout(() => setResendStatus(null), 5000);
     } finally { setResending(false); }
   };
 
@@ -184,6 +218,25 @@ export default function BatchDetailPage() {
         </div>
 
         <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Status Alert Banner */}
+          {resendStatus && (
+            <div style={{
+              padding: '12px 18px',
+              borderRadius: 10,
+              background: resendStatus.includes('successfully') ? '#ecfdf5' : '#fef2f2',
+              border: `1.5px solid ${resendStatus.includes('successfully') ? '#10b981' : '#ef4444'}`,
+              color: resendStatus.includes('successfully') ? '#047857' : '#b91c1c',
+              fontSize: 13,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}>
+              {resendStatus.includes('successfully') ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+              {resendStatus}
+            </div>
+          )}
+
           {/* Stats */}
           {stats && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
