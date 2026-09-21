@@ -256,8 +256,9 @@ def send_batch_invitations(
             smtp = None
 
     if not smtp:
-        logger.error(f"❌ All SMTP connection attempts failed for batch {batch_id}")
-        return
+        err_msg = f"All SMTP connection attempts failed for batch {batch_id} on ports {ports_to_try}"
+        logger.error(f"❌ {err_msg}")
+        return {"sent": 0, "failed": len(sessions), "error": err_msg}
 
     try:
         for session in sessions:
@@ -319,4 +320,5 @@ def send_batch_invitations(
             pass
 
     logger.info(f"Batch {batch_id}: {sent_count} sent, {failed_count} failed")
+    return {"sent": sent_count, "failed": failed_count, "error": None}
 
