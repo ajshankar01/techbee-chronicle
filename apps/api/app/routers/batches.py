@@ -413,11 +413,13 @@ async def list_batches(db: AsyncSession = Depends(get_db)):
 async def test_smtp_diagnostic():
     """Diagnostic endpoint to test SMTP directly from the cloud environment."""
     import smtplib
+    import traceback
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
 
     results = {}
     for port in [465, 587]:
+        server = None
         try:
             if port == 465:
                 server = smtplib.SMTP_SSL(settings.SMTP_HOST, 465, timeout=10)
@@ -432,14 +434,21 @@ async def test_smtp_diagnostic():
             msg["Subject"] = f"Diagnostic Test from Render Port {port}"
             msg.attach(MIMEText(f"SMTP diagnostic test on port {port} succeeded.", "plain"))
             server.sendmail(settings.SMTP_USER, [settings.SMTP_USER], msg.as_string())
-            server.quit()
             results[f"port_{port}"] = "SUCCESS"
         except Exception as e:
-            results[f"port_{port}"] = f"FAILED: {str(e)}"
+            results[f"port_{port}"] = f"FAILED: {type(e).__name__}: {str(e)}"
+        finally:
+            if server:
+                try:
+                    server.quit()
+                except Exception:
+                    pass
 
     return {
         "smtp_host": settings.SMTP_HOST,
         "smtp_user": settings.SMTP_USER,
+        "smtp_pass_len": len(settings.SMTP_PASS) if settings.SMTP_PASS else 0,
+        "smtp_pass_preview": f"{settings.SMTP_PASS[:3]}...{settings.SMTP_PASS[-3:]}" if settings.SMTP_PASS else "EMPTY",
         "smtp_enabled": settings.SMTP_ENABLED,
         "results": results
     }
