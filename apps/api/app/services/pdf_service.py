@@ -194,7 +194,7 @@ async def generate_interview_pdf(report_data: dict, template_id: int = 1) -> byt
     elements.append(Spacer(1, 10))
 
     # Segment 1: Communication Profile
-    elements.append(Paragraph("Segment 1: Communication Profile & Technical Articulation", h2_s))
+    elements.append(Paragraph("Segment 1: Communication Profile, Verbatim Oral Transcript & STAR Breakdown", h2_s))
     comm_score = analysis.get("scores", {}).get("communication", 0) or analysis.get("communication_evaluation", {}).get("fluency_score", 85)
     comm_eval = analysis.get("communication_evaluation", {})
     elements.append(Paragraph(f"<b>Overall Communication Score:</b> {int(comm_score)}%", body_s))
@@ -204,6 +204,49 @@ async def generate_interview_pdf(report_data: dict, template_id: int = 1) -> byt
     if comm_eval.get("evidence_quote"):
         elements.append(Spacer(1, 2))
         elements.append(Paragraph(f"<b>Cited Evidence:</b> <i>\"{comm_eval['evidence_quote']}\"</i>", S('c_ev', fontName='Helvetica-Oblique', fontSize=8.5, leading=11, textColor=TEAL)))
+
+    # Verbatim Spoken Transcript Box
+    tb = comm_eval.get("transcript_breakdown") or {}
+    oral_intro = tb.get("self_introduction") or ""
+    oral_journey = tb.get("journey_so_far") or ""
+    oral_tech = tb.get("core_technologies") or ""
+    if oral_intro or oral_journey or oral_tech:
+        elements.append(Spacer(1, 4))
+        oral_lines = []
+        if oral_intro: oral_lines.append(f"<b>1. Introduction:</b> <i>\"{oral_intro}\"</i>")
+        if oral_journey: oral_lines.append(f"<b>2. Journey So Far:</b> <i>\"{oral_journey}\"</i>")
+        if oral_tech: oral_lines.append(f"<b>3. Core Tech:</b> <i>\"{oral_tech}\"</i>")
+        t_oral = Table([[Paragraph("<br/><br/>".join(oral_lines), S('t_oral_p', fontName='Helvetica', fontSize=8, leading=10, textColor=SLATE_700))]], colWidths=[535])
+        t_oral.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
+            ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#cbd5e1')),
+            ('PADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(t_oral)
+
+    # STAR Format Evaluation Breakdown
+    star_eval = comm_eval.get("star_evaluation")
+    if star_eval:
+        elements.append(Spacer(1, 4))
+        star_rows = [
+            [
+                Paragraph(f"<b>Situation:</b> {'<font color=\"#16a34a\"><b>Detected</b></font>' if star_eval.get('situation', {}).get('detected') else '<font color=\"#dc2626\"><b>Missing</b></font>'}<br/><font color='#64748b' size='7.5'>{star_eval.get('situation', {}).get('summary', '')}</font>", S('st1', fontName='Helvetica', fontSize=8, leading=10)),
+                Paragraph(f"<b>Task:</b> {'<font color=\"#16a34a\"><b>Detected</b></font>' if star_eval.get('task', {}).get('detected') else '<font color=\"#dc2626\"><b>Missing</b></font>'}<br/><font color='#64748b' size='7.5'>{star_eval.get('task', {}).get('summary', '')}</font>", S('st2', fontName='Helvetica', fontSize=8, leading=10)),
+                Paragraph(f"<b>Action:</b> {'<font color=\"#16a34a\"><b>Detected</b></font>' if star_eval.get('action', {}).get('detected') else '<font color=\"#dc2626\"><b>Missing</b></font>'}<br/><font color='#64748b' size='7.5'>{star_eval.get('action', {}).get('summary', '')}</font>", S('st3', fontName='Helvetica', fontSize=8, leading=10)),
+                Paragraph(f"<b>Result:</b> {'<font color=\"#16a34a\"><b>Detected</b></font>' if star_eval.get('result', {}).get('detected') else '<font color=\"#dc2626\"><b>Missing</b></font>'}<br/><font color='#64748b' size='7.5'>{star_eval.get('result', {}).get('summary', '')}</font>", S('st4', fontName='Helvetica', fontSize=8, leading=10)),
+            ]
+        ]
+        t_star = Table(star_rows, colWidths=[133, 134, 134, 134])
+        t_star.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f1f5f9')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('PADDING', (0, 0), (-1, -1), 5),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        elements.append(t_star)
+        if star_eval.get("narrative"):
+            elements.append(Spacer(1, 2))
+            elements.append(Paragraph(f"<b>STAR Narrative:</b> {star_eval['narrative']}", S('st_n', fontName='Helvetica-Oblique', fontSize=8, leading=10, textColor=SLATE_700)))
     
     elements.append(Spacer(1, 10))
 
@@ -352,15 +395,46 @@ async def generate_interview_pdf(report_data: dict, template_id: int = 1) -> byt
                 elements.append(Spacer(1, 3))
     elements.append(Spacer(1, 10))
 
-    # Corporate Survival & Longevity Index
-    elements.append(Paragraph("Corporate Survival & Retention Forecast", h2_s))
+    # Corporate Survival & Longevity Index (4 Segments)
+    elements.append(Paragraph("Corporate Survival, Team Longevity & Strategic Retention Forecast", h2_s))
     surv = analysis.get("corporate_survival_evaluation", {})
     surv_idx = surv.get("survival_index", 86)
     ret_risk = surv.get("retention_risk", "Low")
-    elements.append(Paragraph(f"<b>Survival Index:</b> {surv_idx}% · <b>Flight Risk:</b> {ret_risk} · <b>Pressure Resilience:</b> {surv.get('pressure_resilience_score', 84)}%", body_s))
+    elements.append(Paragraph(f"<b>Corporate Survival Index:</b> <font color='#0284c7'><b>{surv_idx}%</b></font> (Based on all 4 Segments: Oral 25%, Cognitive 25%, Mindset 25%, Email 25%)", body_s))
+    elements.append(Paragraph(f"<b>Flight Risk:</b> {ret_risk} · <b>Loyalty Retention Score:</b> {surv.get('retention_score', 85)}% · <b>Pressure Resilience:</b> {surv.get('pressure_resilience_score', 84)}% · <b>Collaboration:</b> {surv.get('collaboration_readiness_score', 88)}%", body_s))
     if surv.get("longevity_forecast"):
         elements.append(Spacer(1, 3))
         elements.append(Paragraph(f"<i>{surv['longevity_forecast']}</i>", S('surv_f', fontName='Helvetica-Oblique', fontSize=8.5, leading=11, textColor=SLATE_700)))
+
+    # 3 Decision Reasons & 3 Improvement Areas
+    reasons = surv.get("decision_reasons") or [
+        "Demonstrated composure and steady problem-solving consistency under timed assessment pressure.",
+        "High conscientiousness and rule compliance ensure low defect leakage during code and task delivery.",
+        "Balanced psychological profile reflects healthy emotional regulation and high willingness to receive technical feedback without friction."
+    ]
+    improvements = surv.get("improvement_areas") or [
+        "Build confidence in articulating independent technical decisions during squad architecture reviews.",
+        "Proactively escalate blockers in sprint standups rather than waiting for scheduled 1:1 check-ins.",
+        "Transition from guided execution to self-driven resolution for unfamiliar technology spikes."
+    ]
+
+    elements.append(Spacer(1, 4))
+    surv_box_data = [
+        [
+            Paragraph("<b>Why this Decision was Awarded (Key Evidence Basis):</b><br/>" + "<br/>".join([f"• {r}" for r in reasons[:3]]), S('s_r', fontName='Helvetica', fontSize=8, leading=10, textColor=colors.HexColor('#065f46'))),
+            Paragraph("<b>Critical Growth & Intervention Areas:</b><br/>" + "<br/>".join([f"• {i}" for i in improvements[:3]]), S('s_i', fontName='Helvetica', fontSize=8, leading=10, textColor=colors.HexColor('#991b1b'))),
+        ]
+    ]
+    t_surv_box = Table(surv_box_data, colWidths=[265, 270])
+    t_surv_box.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, 0), colors.HexColor('#f0fdf4')),
+        ('BACKGROUND', (1, 0), (1, 0), colors.HexColor('#fef2f2')),
+        ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#cbd5e1')),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+        ('PADDING', (0, 0), (-1, -1), 6),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]))
+    elements.append(t_surv_box)
     elements.append(Spacer(1, 10))
 
     # Category-Wise Actionable Development Roadmap

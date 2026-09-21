@@ -1430,6 +1430,9 @@ export default function UnifiedInterviewRoomPage() {
   const [activeSessionId, setActiveSessionId] = useState<string>("mock-session-id");
 
   const [candidateFirstName, setCandidateFirstName] = useState<string>("Candidate");
+  const [candidateEmailState, setCandidateEmailState] = useState<string>("");
+  const [candidateFullNameState, setCandidateFullNameState] = useState<string>("");
+  const [candidateSapIdState, setCandidateSapIdState] = useState<string>("");
 
   const { videoRef, streamRef, mediaInitialized, audioCtxRef, audioDestRef } = useMediaStream();
   const proctoring = useProctoring(phase);
@@ -1447,10 +1450,18 @@ export default function UnifiedInterviewRoomPage() {
 
   useEffect(() => {
     let localName = "";
+    let localEmail = "";
+    let localSap = "";
     if (typeof window !== "undefined") {
       localName = sessionStorage.getItem("candidate_name") ||
                   sessionStorage.getItem("candidate_display_name") ||
                   localStorage.getItem("candidate_name") || "";
+      localEmail = sessionStorage.getItem("candidate_email") ||
+                   localStorage.getItem("candidate_email") || "";
+      localSap = sessionStorage.getItem("candidate_sap") ||
+                 sessionStorage.getItem("sap_id") ||
+                 sessionStorage.getItem("candidate_sap_id") ||
+                 localStorage.getItem("candidate_sap") || "";
     }
     fetchRealSession().then((sessionData) => {
       const sId = sessionData?.session_id || "session-123";
@@ -1458,7 +1469,27 @@ export default function UnifiedInterviewRoomPage() {
       
       const fullName = sessionData?.candidate_name || localName || "Candidate";
       const fName = fullName.trim().split(/\s+/)[0] || "Candidate";
+      const cEmail = sessionData?.candidate_email || localEmail || "";
+      const cSap = sessionData?.candidate_sap_id || localSap || "";
+
       setCandidateFirstName(fName);
+      setCandidateFullNameState(fullName);
+      setCandidateEmailState(cEmail);
+      setCandidateSapIdState(cSap);
+
+      if (typeof window !== "undefined") {
+        if (fullName) {
+          sessionStorage.setItem("candidate_name", fullName);
+          sessionStorage.setItem("candidate_display_name", fullName);
+        }
+        if (cEmail) {
+          sessionStorage.setItem("candidate_email", cEmail);
+        }
+        if (cSap) {
+          sessionStorage.setItem("candidate_sap", cSap);
+          sessionStorage.setItem("candidate_sap_id", cSap);
+        }
+      }
 
       fetchSegments(sId, fName).then((data) => {
         setSegments(data);
@@ -1501,9 +1532,9 @@ export default function UnifiedInterviewRoomPage() {
       setIsUploading(true);
       setUploadStep(1); // Step 1: Uploading Video Recording to AWS
       let uploadedVideoUrl = "";
-      const cEmail = (typeof window !== "undefined" && (sessionStorage.getItem("candidate_email") || localStorage.getItem("candidate_email"))) || "fresher@techbee.in";
-      const cName = (typeof window !== "undefined" && (sessionStorage.getItem("candidate_name") || localStorage.getItem("candidate_name"))) || candidateFirstName || "Fresher Candidate";
-      const cSap = (typeof window !== "undefined" && (sessionStorage.getItem("candidate_sap") || sessionStorage.getItem("sap_id") || localStorage.getItem("candidate_sap"))) || "";
+      const cEmail = candidateEmailState || (typeof window !== "undefined" && (sessionStorage.getItem("candidate_email") || localStorage.getItem("candidate_email"))) || "";
+      const cName = candidateFullNameState || (typeof window !== "undefined" && (sessionStorage.getItem("candidate_name") || localStorage.getItem("candidate_name"))) || candidateFirstName || "Candidate";
+      const cSap = candidateSapIdState || (typeof window !== "undefined" && (sessionStorage.getItem("candidate_sap") || sessionStorage.getItem("sap_id") || localStorage.getItem("candidate_sap"))) || "";
 
       const finalizeSessionAndReport = async (videoUrl: string) => {
         // Step 2: Evaluating responses & cognitive/psychometric scoring

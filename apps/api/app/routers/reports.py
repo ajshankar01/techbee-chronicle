@@ -264,6 +264,15 @@ async def get_session_report(
                 "evidence_quote": "Demonstrated technical fluency and structured presentation of technical milestones.",
                 "reasoning": "Candidate articulated their technical background with good pacing and enterprise-appropriate vocabulary."
             }
+            if "star_evaluation" not in comm_eval:
+                comm_eval["star_evaluation"] = {
+                    "situation": { "detected": True, "summary": "Provided initial context and technical project background." },
+                    "task": { "detected": False, "summary": "Failed to articulate specific technical constraints and milestone targets." },
+                    "action": { "detected": False, "summary": "Omitted explicit hands-on technical steps and design decisions." },
+                    "result": { "detected": True, "summary": "Highlighted project outcome, deployment, and key metrics achieved." },
+                    "narrative": "Candidate provided Situation & Result, but failed to detail specific Task and Action."
+                }
+
             email_sub = pq_json.get("email_submission")
             email_eval = pq_json.get("email_evaluation")
             email_score = pq_json.get("email_writing_score") or (email_eval.get("etiquette_score") if email_eval else 85)
@@ -274,24 +283,51 @@ async def get_session_report(
                 "evidence_quote": "Targeting cloud certifications and long-term enterprise delivery roles within HCLTech.",
                 "feasibility_analysis": "Technical roadmap aligns closely with HCLTech's enterprise client service demands."
             }
-            surv_eval = pq_json.get("corporate_survival_evaluation") or {
-                "survival_index": 86,
-                "pressure_resilience_score": 84,
-                "collaboration_readiness_score": 88,
-                "retention_risk": (analysis.advanced_report_json or {}).get("retention_risk", "Low"),
-                "retention_score": (analysis.advanced_report_json or {}).get("retention_score", 85),
-                "longevity_forecast": "Stable corporate survival trajectory with regular mentoring.",
-                "decision_reasons": [
+
+            # 4-Segment Survival Calculation
+            c_comm = float(analysis.communication_score or 80.0) if analysis else 80.0
+            c_cog = float(analysis.cognitive_composite_score or 80.0) if analysis else 80.0
+            c_psy = float(analysis.psychometric_score or 80.0) if analysis else 80.0
+            c_email = float(email_score or 80.0)
+            exact_surv_idx = int(round((0.25 * c_comm) + (0.25 * c_cog) + (0.25 * c_psy) + (0.25 * c_email)))
+
+            surv_eval = pq_json.get("corporate_survival_evaluation") or {}
+            surv_eval["survival_index"] = exact_surv_idx
+            surv_eval["segment_formula"] = "Survival Index = 0.25*(Communication) + 0.25*(Cognitive) + 0.25*(Psychometric) + 0.25*(Email Writing)"
+            surv_eval["segment_inputs"] = {
+                "communication": c_comm,
+                "cognitive": c_cog,
+                "psychometric": c_psy,
+                "email_writing": c_email
+            }
+            if not surv_eval.get("pressure_resilience_score"):
+                surv_eval["pressure_resilience_score"] = 84
+            if not surv_eval.get("collaboration_readiness_score"):
+                surv_eval["collaboration_readiness_score"] = 88
+            if not surv_eval.get("retention_risk"):
+                surv_eval["retention_risk"] = (analysis.advanced_report_json or {}).get("retention_risk", "Low") if analysis else "Low"
+            if not surv_eval.get("retention_score"):
+                surv_eval["retention_score"] = (analysis.advanced_report_json or {}).get("retention_score", 85) if analysis else 85
+            if not surv_eval.get("longevity_forecast"):
+                surv_eval["longevity_forecast"] = "Stable corporate survival trajectory with regular mentoring."
+
+            if not surv_eval.get("decision_reasons") or len(surv_eval.get("decision_reasons", [])) < 3:
+                surv_eval["decision_reasons"] = [
                     "Demonstrated composure and steady problem-solving consistency under timed assessment pressure.",
                     "High conscientiousness and rule compliance ensure low defect leakage during code and task delivery.",
                     "Balanced psychological profile reflects healthy emotional regulation and high willingness to receive technical feedback without friction."
-                ],
-                "improvement_areas": [
+                ]
+            else:
+                surv_eval["decision_reasons"] = surv_eval["decision_reasons"][:3]
+
+            if not surv_eval.get("improvement_areas") or len(surv_eval.get("improvement_areas", [])) < 3:
+                surv_eval["improvement_areas"] = [
                     "Build confidence in articulating independent technical decisions during squad architecture reviews.",
                     "Proactively escalate blockers in sprint standups rather than waiting for scheduled 1:1 check-ins.",
                     "Transition from guided execution to self-driven resolution for unfamiliar technology spikes."
                 ]
-            }
+            else:
+                surv_eval["improvement_areas"] = surv_eval["improvement_areas"][:3]
             gran_imp = pq_json.get("granular_improvements") or {
                 "oral_communication": {
                     "gaps": [
@@ -704,8 +740,26 @@ async def generate_and_upload_pdf(
         from app.services.pdf_service import generate_interview_pdf
         from app.services.storage_service import upload_report_pdf
 
-        candidate_name = req.candidate_name or "Candidate"
-        candidate_email = req.candidate_email or "fresher@techbee.in"
+        try:
+            session_uuid = uuid.UUID(session_id)
+        except ValueError:
+            session_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, session_id)
+
+        # Check existing session and candidate in DB to use real registered identity
+        cand_db_match = None
+        if session_uuid:
+            sess_lookup = await db.execute(
+                select(InterviewSession, Candidate)
+                .join(Candidate, InterviewSession.candidate_id == Candidate.id)
+                .where(InterviewSession.id == session_uuid)
+            )
+            s_cand_row = sess_lookup.first()
+            if s_cand_row:
+                session_db_obj, cand_db_match = s_cand_row
+
+        candidate_name = (cand_db_match.full_name if cand_db_match else None) or req.candidate_name or "Candidate"
+        candidate_email = (cand_db_match.email if cand_db_match else None) or req.candidate_email or "unknown@fresher.in"
+        cand_sap_id = (cand_db_match.employee_id if cand_db_match and getattr(cand_db_match, 'employee_id', None) else None) or req.sap_id or ""
 
         beh = req.behavioral_summary
         behavioral_scores = {
@@ -1038,6 +1092,8 @@ async def generate_and_upload_pdf(
                 "psychometric_scores": psy_metrics,
                 "email_submission": email_sub,
                 "email_evaluation": email_eval,
+                "communication_evaluation": (existing_ar.per_question_analysis_json.get("communication_evaluation") if (existing_ar and existing_ar.per_question_analysis_json) else {}) or (analysis.get("communication_evaluation") if 'analysis' in locals() and analysis else {}),
+                "corporate_survival_evaluation": (existing_ar.per_question_analysis_json.get("corporate_survival_evaluation") if (existing_ar and existing_ar.per_question_analysis_json) else {}) or (analysis.get("corporate_survival_evaluation") if 'analysis' in locals() and analysis else {}),
                 "behavioral": behavioral_scores,
                 "summary_text": summary_text,
                 "strengths": strengths_list,

@@ -215,7 +215,7 @@ export default function BatchDetailPage() {
               )}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={load} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1.5px solid #c7d2e0', background: '#fff', fontSize: 12, color: '#475569', cursor: 'pointer', fontWeight: 600 }}>
+              <button onClick={() => load(false)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1.5px solid #c7d2e0', background: '#fff', fontSize: 12, color: '#475569', cursor: 'pointer', fontWeight: 600 }}>
                 <RefreshCw size={13} /> Refresh
               </button>
               <button onClick={handleResend} disabled={resending} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: resending ? '#94a3b8' : 'linear-gradient(135deg,#6366f1,#8b5cf6)', fontSize: 12, color: '#fff', cursor: 'pointer', fontWeight: 700 }}>

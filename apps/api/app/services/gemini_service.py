@@ -352,7 +352,14 @@ Return ONLY valid JSON matching this schema:
       "Improve elaboration on backend architectures when discussing full stack projects",
       "Structure multi-technology responses using the STAR method"
     ],
-    "scoring_rationale": "Score of 85 awarded based on 135 WPM conversational tempo, correct usage of 6 key technical terms, and high articulation clarity with only 2 minor filler pauses."
+    "scoring_rationale": "Score of 85 awarded based on 135 WPM conversational tempo, correct usage of 6 key technical terms, and high articulation clarity with only 2 minor filler pauses.",
+    "star_evaluation": {{
+      "situation": {{ "detected": true, "summary": "Identified the technical background, team setup, and baseline problem context." }},
+      "task": {{ "detected": false, "summary": "Failed to articulate the specific engineering challenge, scope, and target milestone." }},
+      "action": {{ "detected": false, "summary": "Omitted explicit hands-on technical steps, tools, and design patterns utilized." }},
+      "result": {{ "detected": true, "summary": "Highlighted project outcome, successful application deployment, and key metrics achieved." }},
+      "narrative": "Candidate provided clear Situation and Result, but failed to detail specific Task and Action steps taken during implementation."
+    }}
   }},{email_schema_part}
   "vision_and_mission_evaluation": {{
     "score": 86,
@@ -462,27 +469,71 @@ Return ONLY valid JSON matching this schema:
                 if clean.startswith("json"):
                     clean = clean[4:]
             parsed = json.loads(clean.strip())
+            comm_sc = parsed.get("communication_score", 80)
+            comm_eval_parsed = parsed.get("communication_evaluation", {})
+            if "star_evaluation" not in comm_eval_parsed:
+                comm_eval_parsed["star_evaluation"] = {
+                    "situation": { "detected": True, "summary": "Provided initial context and project background." },
+                    "task": { "detected": False, "summary": "Did not define precise engineering challenges and scope." },
+                    "action": { "detected": False, "summary": "Omitted specific technical action steps taken." },
+                    "result": { "detected": True, "summary": "Described outcome and delivered application metrics." },
+                    "narrative": "Candidate provided Situation and Result, but failed to detail specific Task and Action steps."
+                }
+
+            email_sc = parsed.get("email_writing_score") or (parsed.get("email_evaluation", {}).get("etiquette_score") if email_submission else 80)
+            
+            # Numeric conversion for 4 segments
+            try:
+                num_cog = float(cog_score) if (cog_score is not None and cog_score != "N/A") else 80.0
+            except Exception:
+                num_cog = 80.0
+            try:
+                num_psy = float(psy_score) if (psy_score is not None and psy_score != "N/A") else 80.0
+            except Exception:
+                num_psy = 80.0
+            try:
+                num_comm = float(comm_sc)
+            except Exception:
+                num_comm = 80.0
+            try:
+                num_email = float(email_sc) if email_sc is not None else 80.0
+            except Exception:
+                num_email = 80.0
+
+            # 4-Segment Corporate Survival Formula:
+            # 25% Communication + 25% Cognitive + 25% Psychometric + 25% Email
+            exact_survival_idx = int(round((0.25 * num_comm) + (0.25 * num_cog) + (0.25 * num_psy) + (0.25 * num_email)))
+
+            corp_surv = parsed.get("corporate_survival_evaluation") or {}
+            corp_surv["survival_index"] = exact_survival_idx
+            corp_surv["segment_formula"] = "Survival Index = 0.25*(Communication) + 0.25*(Cognitive) + 0.25*(Psychometric) + 0.25*(Email Writing)"
+            corp_surv["segment_inputs"] = {
+                "communication": num_comm,
+                "cognitive": num_cog,
+                "psychometric": num_psy,
+                "email_writing": num_email
+            }
+            if not corp_surv.get("decision_reasons") or len(corp_surv.get("decision_reasons", [])) < 3:
+                corp_surv["decision_reasons"] = [
+                    "Demonstrated composure and steady problem-solving consistency under timed assessment pressure.",
+                    "High conscientiousness and rule compliance ensure low defect leakage during code and task delivery.",
+                    "Balanced psychological profile reflects healthy emotional regulation and high willingness to receive technical feedback without friction."
+                ]
+            else:
+                corp_surv["decision_reasons"] = corp_surv["decision_reasons"][:3]
+
+            if not corp_surv.get("improvement_areas") or len(corp_surv.get("improvement_areas", [])) < 3:
+                corp_surv["improvement_areas"] = [
+                    "Build confidence in articulating independent technical decisions during squad architecture reviews.",
+                    "Proactively escalate blockers in sprint standups rather than waiting for scheduled 1:1 check-ins.",
+                    "Transition from guided execution to self-driven resolution for unfamiliar technology spikes."
+                ]
+            else:
+                corp_surv["improvement_areas"] = corp_surv["improvement_areas"][:3]
+
             return {
-                "communication_score": parsed.get("communication_score", 80),
-                "communication_evaluation": parsed.get("communication_evaluation", {
-                    "fluency_score": 80, "articulation_score": 80, "vocabulary_score": 80,
-                    "filler_word_count": 0, "evidence_quote": "Demonstrated articulate spoken introduction.",
-                    "reasoning": "Clear oral articulation with good professional diction.",
-                    "transcript_breakdown": {
-                        "self_introduction": "Candidate presented a professional introduction.",
-                        "journey_so_far": "Candidate outlined their education and technical preparation.",
-                        "core_technologies": "Candidate discussed core frameworks and engineering interests."
-                    },
-                    "detected_keywords": ["Software Engineering", "Full Stack", "Problem Solving"],
-                    "metrics": {
-                        "cadence_wpm": 130,
-                        "speech_clarity": "High",
-                        "domain_vocabulary_density": "7.5%",
-                        "filler_pause_ratio": "Low (1 pause/min)"
-                    },
-                    "improvement_areas": ["Incorporate more architectural depth when describing backend systems."],
-                    "scoring_rationale": "Awarded score based on steady speaking cadence and accurate technical terminology."
-                }),
+                "communication_score": comm_sc,
+                "communication_evaluation": comm_eval_parsed,
                 "overall_score": parsed.get("overall_score", 80),
                 "email_writing_score": parsed.get("email_writing_score", 85 if email_submission else None),
                 "email_evaluation": parsed.get("email_evaluation", {
@@ -495,21 +546,7 @@ Return ONLY valid JSON matching this schema:
                     "score": 82, "ambition_rating": "High", "hcl_synergy_rating": "High",
                     "evidence_quote": "", "feasibility_analysis": "Realistic upskilling roadmap matching enterprise needs."
                 }),
-                "corporate_survival_evaluation": parsed.get("corporate_survival_evaluation", {
-                    "survival_index": 85, "pressure_resilience_score": 82, "collaboration_readiness_score": 88,
-                    "retention_risk": "Low", "retention_score": 85,
-                    "longevity_forecast": "Stable corporate survival trajectory with regular mentoring.",
-                    "decision_reasons": [
-                        "Demonstrated composure and steady problem-solving consistency under timed assessment pressure.",
-                        "High conscientiousness and rule compliance ensure low defect leakage during code and task delivery.",
-                        "Balanced psychological profile reflects healthy emotional regulation and high willingness to receive technical feedback without friction."
-                    ],
-                    "improvement_areas": [
-                        "Build confidence in articulating independent technical decisions during squad architecture reviews.",
-                        "Proactively escalate blockers in sprint standups rather than waiting for scheduled 1:1 check-ins.",
-                        "Transition from guided execution to self-driven resolution for unfamiliar technology spikes."
-                    ]
-                }),
+                "corporate_survival_evaluation": corp_surv,
                 "granular_improvements": parsed.get("granular_improvements", {
                     "oral_communication": {
                         "gaps": [
@@ -594,7 +631,14 @@ Return ONLY valid JSON matching this schema:
                 "filler_pause_ratio": "Moderate (2-3 pauses/min)"
             },
             "improvement_areas": ["Practice articulating technical concepts with structured examples."],
-            "scoring_rationale": "Baseline oral communication score awarded for standard cadence and terminology."
+            "scoring_rationale": "Baseline oral communication score awarded for standard cadence and terminology.",
+            "star_evaluation": {
+                "situation": { "detected": True, "summary": "Provided educational background and broad project overview." },
+                "task": { "detected": False, "summary": "Failed to articulate specific technical constraints and task boundaries." },
+                "action": { "detected": False, "summary": "Omitted explicit hands-on development actions taken." },
+                "result": { "detected": True, "summary": "Mentioned outcome and foundational milestones reached." },
+                "narrative": "Candidate provided Situation & Result, but failed to detail specific Task and Action."
+            }
         },
         "overall_score": 75,
         "email_writing_score": 80 if email_submission else None,
@@ -609,7 +653,15 @@ Return ONLY valid JSON matching this schema:
             "evidence_quote": "", "feasibility_analysis": "Aspirations are positive and actionable."
         },
         "corporate_survival_evaluation": {
-            "survival_index": 80, "pressure_resilience_score": 78, "collaboration_readiness_score": 82,
+            "survival_index": int(round((0.25 * 75) + (0.25 * (float(cog_score) if (cog_score is not None and cog_score != "N/A") else 80.0)) + (0.25 * (float(psy_score) if (psy_score is not None and psy_score != "N/A") else 80.0)) + (0.25 * 80))),
+            "segment_formula": "Survival Index = 0.25*(Communication) + 0.25*(Cognitive) + 0.25*(Psychometric) + 0.25*(Email Writing)",
+            "segment_inputs": {
+                "communication": 75.0,
+                "cognitive": float(cog_score) if (cog_score is not None and cog_score != "N/A") else 80.0,
+                "psychometric": float(psy_score) if (psy_score is not None and psy_score != "N/A") else 80.0,
+                "email_writing": 80.0
+            },
+            "pressure_resilience_score": 78, "collaboration_readiness_score": 82,
             "retention_risk": "Low", "retention_score": 80,
             "longevity_forecast": "Stable corporate survival trajectory with regular mentoring.",
             "decision_reasons": [

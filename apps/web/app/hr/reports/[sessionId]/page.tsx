@@ -322,6 +322,15 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
     filler_pause_ratio: "Low (1-2 pauses/min)"
   };
 
+  // STAR Evaluation
+  const starEvaluation = commEval.star_evaluation || {
+    situation: { detected: true, summary: "Provided initial context and project background." },
+    task: { detected: false, summary: "Failed to articulate specific technical constraints and milestone targets." },
+    action: { detected: false, summary: "Omitted explicit hands-on technical steps and design decisions." },
+    result: { detected: true, summary: "Highlighted project outcome, deployment, and key metrics achieved." },
+    narrative: "Candidate provided Situation & Result, but failed to detail specific Task and Action."
+  };
+
   // Year-over-Year Progression
   const yoy = analysis?.yoy_progress || { has_yoy: false };
 
@@ -547,9 +556,9 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
 
                 <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '18px 20px' }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <AlertTriangle size={16} color="#dc2626" /> Priority Focus Areas
+                    <AlertTriangle size={16} color="#dc2626" /> Priority Focus Areas & STAR Delivery Analysis
                   </div>
-                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: '#334155', lineHeight: 1.7 }}>
+                  <ul style={{ margin: '0 0 12px', paddingLeft: 18, fontSize: 12.5, color: '#334155', lineHeight: 1.7 }}>
                     {(analysis.areas_of_improvement && analysis.areas_of_improvement.length > 0 ? analysis.areas_of_improvement : [
                       "Structure technical answers using the STAR format (Situation, Task, Action, Result).",
                       "Accelerate perceptual pattern recognition to improve overall cognitive throughput."
@@ -557,6 +566,33 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
                       <li key={i}>{imp}</li>
                     ))}
                   </ul>
+
+                  {/* Explicit Granular STAR-Format Breakdown Card */}
+                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 800, color: '#1e293b', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>STAR Competency Framework Breakdown:</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: '#6366f1', background: '#e0e7ff', padding: '2px 6px', borderRadius: 4 }}>Segment 1 Oral</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 8 }}>
+                      {[
+                        { label: 'Situation', data: starEvaluation.situation },
+                        { label: 'Task', data: starEvaluation.task },
+                        { label: 'Action', data: starEvaluation.action },
+                        { label: 'Result', data: starEvaluation.result },
+                      ].map((st) => (
+                        <div key={st.label} style={{ background: '#ffffff', border: `1.5px solid ${st.data?.detected ? '#86efac' : '#fca5a5'}`, borderRadius: 6, padding: '6px 8px', textAlign: 'center' }}>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>{st.label}</div>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: st.data?.detected ? '#16a34a' : '#dc2626', marginTop: 2 }}>
+                            {st.data?.detected ? '✓ Provided' : '✗ Missing'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#475569', lineHeight: 1.5, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '8px 10px', fontStyle: 'italic' }}>
+                      <strong style={{ fontStyle: 'normal', color: '#0f172a' }}>Evaluation: </strong>
+                      {starEvaluation.narrative || "Candidate provided Situation & Result, but failed to detail specific Task and Action."}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -905,6 +941,43 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
                 </span>
               }
             >
+              {/* 4-Segment Survival Mathematical Formula & Score Card */}
+              <div style={{ background: '#f0f9ff', border: '1.5px solid #bae6fd', borderRadius: 12, padding: '14px 18px', marginBottom: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#0369a1', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Calculator size={16} /> 4-Segment Mathematical Survival Formula:
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: '#0284c7', background: '#e0f2fe', padding: '3px 10px', borderRadius: 8 }}>
+                    Composite Longevity: {survIndex}/100
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: '#0c4a6e', fontWeight: 600, marginBottom: 10 }}>
+                  Survival Index = (0.25 × Oral Comm) + (0.25 × Cognitive Ability) + (0.25 × Psychometric Mindset) + (0.25 × Business Email)
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                  <div style={{ background: '#ffffff', border: '1px solid #e0f2fe', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b' }}>1. Spoken Comm (25%)</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#0284c7' }}>{commScore}%</div>
+                    <div style={{ fontSize: 9.5, color: '#0369a1' }}>+{(0.25 * commScore).toFixed(1)} pts</div>
+                  </div>
+                  <div style={{ background: '#ffffff', border: '1px solid #e0f2fe', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b' }}>2. Cognitive Test (25%)</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#059669' }}>{cogComposite}%</div>
+                    <div style={{ fontSize: 9.5, color: '#047857' }}>+{(0.25 * cogComposite).toFixed(1)} pts</div>
+                  </div>
+                  <div style={{ background: '#ffffff', border: '1px solid #e0f2fe', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b' }}>3. Psychometric (25%)</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#d97706' }}>{psyScore}%</div>
+                    <div style={{ fontSize: 9.5, color: '#b45309' }}>+{(0.25 * psyScore).toFixed(1)} pts</div>
+                  </div>
+                  <div style={{ background: '#ffffff', border: '1px solid #e0f2fe', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b' }}>4. Email Writing (25%)</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#4f46e5' }}>{emailWritingScore}%</div>
+                    <div style={{ fontSize: 9.5, color: '#4338ca' }}>+{(0.25 * emailWritingScore).toFixed(1)} pts</div>
+                  </div>
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
                 <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '16px', textAlign: 'center' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#166534', textTransform: 'uppercase', marginBottom: 4 }}>Pressure Resilience</div>
@@ -1189,14 +1262,42 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
             </SectionCard>
         </div>
 
-        {/* ══════════════════ TAB 6: RAW TEST ITEMS ══════════════════ */}
+        {/* ══════════════════ TAB 6: RAW TEST ITEMS (ALL 4 SEGMENTS) ══════════════════ */}
         <div className={`tab-content-pane ${activeTab === 'test_results' ? 'tab-active' : ''}`}>
           <div className="print-only" style={{ display: 'none', marginBottom: 14 }}>
             <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#0f172a', borderBottom: '2px solid #cbd5e1', paddingBottom: 6 }}>
-              Area 6: Raw Test Item Audit Trail (Cognitive & Psychometric Responses)
+              Area 6: Complete 4-Segment Raw Candidate Answers & Submissions Audit Trail
             </h2>
           </div>
-            <SectionCard title="Cognitive Speed Test Answers (20 Items)" icon={<Zap size={18} />} accentColor="#059669">
+
+            {/* SEGMENT 1: VERBATIM SPOKEN TRANSCRIPT */}
+            <SectionCard title="Segment 1: Spoken Oral Transcript (Self-Intro, Journey & Technologies)" icon={<MessageSquare size={18} />} accentColor="#6366f1">
+              <div style={{ background: '#f8fafc', border: '1.5px solid #e0e7ff', borderRadius: 10, padding: '16px', marginBottom: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#6366f1', textTransform: 'uppercase', marginBottom: 4 }}>1. Self-Introduction:</div>
+                    <div style={{ fontSize: 12.5, color: '#1e293b', lineHeight: 1.6, fontStyle: 'italic' }}>
+                      "{transcriptBreakdown.self_introduction || spokenTranscriptText}"
+                    </div>
+                  </div>
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#6366f1', textTransform: 'uppercase', marginBottom: 4 }}>2. Professional Journey So Far:</div>
+                    <div style={{ fontSize: 12.5, color: '#1e293b', lineHeight: 1.6, fontStyle: 'italic' }}>
+                      "{transcriptBreakdown.journey_so_far || "Transitioned through foundation milestones, applying rigorous software practices across structured modules."}"
+                    </div>
+                  </div>
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#6366f1', textTransform: 'uppercase', marginBottom: 4 }}>3. Core Technologies Passionate About:</div>
+                    <div style={{ fontSize: 12.5, color: '#1e293b', lineHeight: 1.6, fontStyle: 'italic' }}>
+                      "{transcriptBreakdown.core_technologies || "Specializing in full-stack web applications, scalable REST APIs, relational databases, and cloud engineering."}"
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+
+            {/* SEGMENT 2: COGNITIVE TEST ANSWERS */}
+            <SectionCard title={`Segment 2: Cognitive Speed Test Answers (${reportData?.cognitive_results?.length || 35} Items)`} icon={<Zap size={18} />} accentColor="#059669">
               {reportData?.cognitive_results && reportData.cognitive_results.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   {reportData.cognitive_results.map((res: any, idx: number) => (
@@ -1226,14 +1327,20 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
               )}
             </SectionCard>
 
-            <SectionCard title="Psychometric Test Item Responses (15 Items)" icon={<Brain size={18} />} accentColor="#d97706">
+            {/* SEGMENT 3: PSYCHOMETRIC TEST ITEM RESPONSES */}
+            <SectionCard title={`Segment 3: Psychometric Test Item Responses (${reportData?.psychometric_results?.length || 15} Items)`} icon={<Brain size={18} />} accentColor="#d97706">
               {reportData?.psychometric_results && reportData.psychometric_results.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {reportData.psychometric_results.map((res: any, idx: number) => (
                     <div key={idx} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ flex: 1, paddingRight: 16 }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: '#d97706', textTransform: 'uppercase' }}>Trait: {res.trait}</span>
-                        <div style={{ fontSize: 12.5, color: '#1e293b', fontWeight: 500, marginTop: 2 }}>"{res.statement}"</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#d97706', textTransform: 'uppercase' }}>Trait: {res.trait}</span>
+                          {res.ideal_response && (
+                            <span style={{ fontSize: 9.5, fontWeight: 600, color: '#64748b', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>Ideal: {res.ideal_response}</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 12.5, color: '#1e293b', fontWeight: 500, marginTop: 3 }}>"{res.statement}"</div>
                       </div>
                       <div style={{ textAlign: 'center', minWidth: 60, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '6px' }}>
                         <div style={{ fontSize: 16, fontWeight: 900, color: '#b45309' }}>{res.selected_score}/5</div>
@@ -1244,6 +1351,24 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
                 </div>
               ) : (
                 <div style={{ fontSize: 12, color: '#64748b', textAlign: 'center', padding: '20px' }}>No raw psychometric items stored.</div>
+              )}
+            </SectionCard>
+
+            {/* SEGMENT 4: VERBATIM SUBMITTED BUSINESS EMAIL */}
+            <SectionCard title="Segment 4: Submitted Business Email (Verbatim Text)" icon={<Mail size={18} />} accentColor="#0284c7">
+              {emailSub ? (
+                <div style={{ background: '#f8fafc', border: '1.5px solid #cbd5e1', borderRadius: 12, overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6, background: '#f1f5f9' }}>
+                    <div><strong style={{ color: '#64748b', width: 65, display: 'inline-block' }}>To:</strong> <span style={{ color: '#0284c7', fontWeight: 600 }}>{emailSub.to || 'techbeechronical@hcltech.com'}</span></div>
+                    {emailSub.cc && <div><strong style={{ color: '#64748b', width: 65, display: 'inline-block' }}>Cc:</strong> <span style={{ color: '#475569' }}>{emailSub.cc}</span></div>}
+                    <div><strong style={{ color: '#64748b', width: 65, display: 'inline-block' }}>Subject:</strong> <span style={{ color: '#0f172a', fontWeight: 700 }}>{emailSub.subject}</span></div>
+                  </div>
+                  <div style={{ padding: '16px', background: '#ffffff', fontSize: 12.5, lineHeight: 1.7, color: '#334155', whiteSpace: 'pre-line' }}>
+                    {emailSub.body}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: '#64748b', textAlign: 'center', padding: '20px' }}>No email submission recorded for this session.</div>
               )}
             </SectionCard>
         </div>

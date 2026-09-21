@@ -498,6 +498,8 @@ async def get_my_session(
         "session_id": str(session.id),
         "status": session.status.value,
         "candidate_name": candidate.display_name,
+        "candidate_email": candidate.email,
+        "candidate_sap_id": getattr(candidate, "employee_id", "") or getattr(candidate, "sap_id", ""),
         "scheduled_at": session.scheduled_at,
         "bond_year": session.bond_year,
         "questions": [
@@ -1334,6 +1336,35 @@ async def upload_recording(
         from app.core.config import settings
         base_url = settings.API_BASE_URL  # http://localhost:8000
         local_serve_url = f"{base_url}/api/interview/serve-recording/{safe_session}"
+
+        # Resolve real candidate details from DB if candidate_email was defaulted or empty
+        if not candidate_email or candidate_email in ("unknown@fresher.in", "fresher@techbee.in"):
+            try:
+                import uuid as _uuid
+                from app.core.database import AsyncSessionLocal
+                from app.models.models import InterviewSession, Candidate
+                from sqlalchemy import select
+                async with AsyncSessionLocal() as _db:
+                    try:
+                        _sess_uuid = _uuid.UUID(session_id)
+                    except ValueError:
+                        _sess_uuid = _uuid.uuid5(_uuid.NAMESPACE_DNS, session_id)
+                    _s_res = await _db.execute(
+                        select(InterviewSession, Candidate)
+                        .join(Candidate, InterviewSession.candidate_id == Candidate.id)
+                        .where(InterviewSession.id == _sess_uuid)
+                    )
+                    _s_row = _s_res.first()
+                    if _s_row:
+                        _s_obj, _c_obj = _s_row
+                        if _c_obj.email:
+                            candidate_email = _c_obj.email
+                        if _c_obj.full_name:
+                            candidate_name = _c_obj.full_name
+                        if getattr(_c_obj, "employee_id", None):
+                            sap_id = _c_obj.employee_id
+            except Exception as _res_err:
+                _logger.warning(f"Candidate resolution from DB in upload_recording skipped: {_res_err}")
 
         # ── Step 2: Upload to S3 under candidates/{email}/videos/ ────────────────
         s3_url = local_serve_url  # default to local if S3 fails
