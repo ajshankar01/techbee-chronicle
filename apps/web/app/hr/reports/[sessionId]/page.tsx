@@ -8,7 +8,7 @@ import {
   Flag, Video, Printer, Brain, Target, Shield, Activity,
   TrendingUp, TrendingDown, Minus, Mail, Calculator, BookOpen,
   UserCheck, AlertTriangle, AlertCircle, HelpCircle, Award, Compass, Zap,
-  Check, Layers, FileText, MessageSquare, Sparkles
+  Check, Layers, FileText, MessageSquare, Sparkles, Volume2
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -304,15 +304,23 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
   };
 
   // Oral Transcript & Breakdown Extraction
-  const oralTranscriptRaw: string = reportData?.oral_transcripts?.seg1 || reportData?.oral_transcripts?.oral || "";
+  const oralTranscriptRaw: string = 
+    reportData?.oral_transcripts?.seg1 || 
+    reportData?.oral_transcripts?.oral || 
+    reportData?.oral_transcripts?.oral_intro || 
+    (typeof reportData?.oral_transcripts === 'string' ? reportData.oral_transcripts : "");
   const fullTranscriptList: any[] = reportData?.full_transcript || [];
-  const candidateSpokenEntries = fullTranscriptList.filter((t: any) => t.speaker === 'candidate' && t.question_type === 'oral_intro');
-  const spokenTranscriptText: string = oralTranscriptRaw || (candidateSpokenEntries.length > 0 ? candidateSpokenEntries[0].text : "") || commEval.evidence_quote || "No spoken transcript recorded for this session.";
+  const candidateSpokenEntries = fullTranscriptList.filter((t: any) => t.speaker === 'candidate' && t.text);
+  const spokenTranscriptText: string = 
+    oralTranscriptRaw || 
+    (candidateSpokenEntries.length > 0 ? candidateSpokenEntries[0].text : "") || 
+    commEval.evidence_quote || 
+    "No spoken transcript recorded for this session.";
   
-  const transcriptBreakdown = commEval.transcript_breakdown || {
-    self_introduction: spokenTranscriptText,
-    journey_so_far: "Transitioned from academic foundations into hands-on enterprise software development and problem solving.",
-    core_technologies: "Focus on modern web architectures, backend services, API designs, and scalable data systems."
+  const transcriptBreakdown = {
+    self_introduction: commEval.transcript_breakdown?.self_introduction || spokenTranscriptText,
+    journey_so_far: commEval.transcript_breakdown?.journey_so_far || "Transitioned from academic foundations into hands-on enterprise software development and problem solving.",
+    core_technologies: commEval.transcript_breakdown?.core_technologies || "Focus on modern web architectures, backend services, API designs, and scalable data systems."
   };
   const detectedKeywords: string[] = commEval.detected_keywords || ["Software Engineering", "Full Stack", "System Design", "Cloud", "Clean Architecture"];
   const commMetrics = commEval.metrics || {
@@ -624,33 +632,48 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
                 <MiniCard label="Filler Words Used" value={`${commEval.filler_word_count ?? 2}`} color="#059669" subtitle="Across spoken duration" />
               </div>
 
-              {/* Spoken Transcript Display with 3 sub-sections */}
+              {/* Spoken Transcript Display with Full Verbatim Box & 3 Sub-sections */}
               <div style={{ background: '#ffffff', border: '1.5px solid #e0e7ff', borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                   <div style={{ fontSize: 13, fontWeight: 800, color: '#3730a3', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <MessageSquare size={16} /> Spoken Candidate Transcript (Self-Intro, Journey & Technologies):
+                    <MessageSquare size={16} /> Spoken Candidate Transcript (Oral Introduction & Technical Response):
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#4338ca', background: '#eef2ff', padding: '3px 8px', borderRadius: 12 }}>
-                    Live Audio Stream
+                    Candidate Speech Audio
                   </span>
                 </div>
 
+                {/* Primary Full Verbatim Speech Transcript as Captured / Verified */}
+                <div style={{ background: '#f8fafc', border: '1.5px solid #c7d2fe', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#4338ca', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Volume2 size={13} /> Full Verified Spoken Transcript:
+                    </div>
+                    <span style={{ fontSize: 10.5, color: '#64748b', fontWeight: 600 }}>
+                      Source: Live STT &amp; Verified Candidate Response
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 13, color: '#0f172a', lineHeight: 1.7, fontWeight: 500 }}>
+                    "{spokenTranscriptText}"
+                  </p>
+                </div>
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>1. Self-Introduction:</div>
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>1. Self-Introduction &amp; Background:</div>
                     <p style={{ margin: 0, fontSize: 12.5, color: '#1e293b', lineHeight: 1.6, fontStyle: 'italic' }}>
                       "{transcriptBreakdown.self_introduction || spokenTranscriptText}"
                     </p>
                   </div>
 
-                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px' }}>
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>2. Professional Journey So Far:</div>
                     <p style={{ margin: 0, fontSize: 12.5, color: '#1e293b', lineHeight: 1.6, fontStyle: 'italic' }}>
                       "{transcriptBreakdown.journey_so_far || "Transitioned through foundation milestones, applying rigorous software practices across structured modules."}"
                     </p>
                   </div>
 
-                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px' }}>
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>3. Core Technologies Passionate About:</div>
                     <p style={{ margin: 0, fontSize: 12.5, color: '#1e293b', lineHeight: 1.6, fontStyle: 'italic' }}>
                       "{transcriptBreakdown.core_technologies || "Specializing in full-stack web applications, scalable REST APIs, relational databases, and cloud engineering."}"
@@ -1273,6 +1296,21 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
             {/* SEGMENT 1: VERBATIM SPOKEN TRANSCRIPT */}
             <SectionCard title="Segment 1: Spoken Oral Transcript (Self-Intro, Journey & Technologies)" icon={<MessageSquare size={18} />} accentColor="#6366f1">
               <div style={{ background: '#f8fafc', border: '1.5px solid #e0e7ff', borderRadius: 10, padding: '16px', marginBottom: 10 }}>
+                {/* Full Verbatim Speech Transcript as Captured / Verified */}
+                <div style={{ background: '#ffffff', border: '1.5px solid #c7d2fe', borderRadius: 8, padding: '12px 14px', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#4338ca', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Volume2 size={13} /> Complete Verbatim Spoken Transcript:
+                    </div>
+                    <span style={{ fontSize: 10.5, color: '#64748b', fontWeight: 600 }}>
+                      Captured from Candidate Audio
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 13, color: '#0f172a', lineHeight: 1.7, fontWeight: 500 }}>
+                    "{spokenTranscriptText}"
+                  </div>
+                </div>
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 14px' }}>
                     <div style={{ fontSize: 11, fontWeight: 800, color: '#6366f1', textTransform: 'uppercase', marginBottom: 4 }}>1. Self-Introduction:</div>

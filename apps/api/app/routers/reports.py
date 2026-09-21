@@ -31,11 +31,17 @@ os.makedirs(PDF_LOCAL_DIR, exist_ok=True)
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 
-def _parse_oral_transcripts(raw_text: str, pq_json: dict = None) -> dict:
-    """Parse oral segment transcripts stored in per_question_analysis_json or summary_text as [TRANSCRIPT:segX] blocks."""
+def _parse_oral_transcripts(raw_text: str = "", pq_json: dict = None, cr_transcript: str = "") -> dict:
+    """Parse oral segment transcripts stored in per_question_analysis_json, candidate_responses, or summary_text as [TRANSCRIPT:segX] blocks."""
     result = {}
     if pq_json and isinstance(pq_json, dict) and pq_json.get("oral_transcripts"):
         result.update(pq_json["oral_transcripts"])
+    if cr_transcript:
+        cr_t = cr_transcript.strip()
+        if cr_t:
+            result.setdefault("seg1", cr_t)
+            result.setdefault("oral", cr_t)
+            result.setdefault("oral_intro", cr_t)
     if raw_text:
         import re
         pattern = re.compile(r'\[TRANSCRIPT:(.*?)\]\n(.*?)(?=\[TRANSCRIPT:|\[EMAIL_SUBMISSION:|$)', re.DOTALL)
@@ -137,6 +143,21 @@ async def get_session_report(
                     "vision_and_mission": analysis.vision_and_mission_score,
                 }
 
+            candidate_oral_transcript = ""
+            cr_lookup = await db.execute(
+                select(CandidateResponse.transcript_text)
+                .join(SessionQuestion, SessionQuestion.id == CandidateResponse.question_id)
+                .where(
+                    CandidateResponse.session_id == session_uuid,
+                    CandidateResponse.transcript_text.isnot(None),
+                    CandidateResponse.transcript_text != ""
+                )
+                .order_by(SessionQuestion.order_index)
+            )
+            cr_first = cr_lookup.scalars().first()
+            if cr_first:
+                candidate_oral_transcript = cr_first.strip()
+
             transcript_data = report.full_transcript_json if (report and report.full_transcript_json) else []
             if not transcript_data:
                 # Fallback to fetching from SessionQuestion and CandidateResponse
@@ -158,6 +179,8 @@ async def get_session_report(
                             "text": cr.transcript_text,
                             "question_type": sq.question_type.name if sq.question_type else ""
                         })
+                        if not candidate_oral_transcript:
+                            candidate_oral_transcript = cr.transcript_text.strip()
 
             pq_json = analysis.per_question_analysis_json or {} if analysis else {}
 
@@ -518,7 +541,7 @@ async def get_session_report(
                 "full_transcript": transcript_data,
                 "cognitive_results": cognitive_results,
                 "psychometric_results": psychometric_results,
-                "oral_transcripts": _parse_oral_transcripts(analysis.summary_text if analysis else "", pq_json),
+                "oral_transcripts": _parse_oral_transcripts(analysis.summary_text if analysis else "", pq_json, candidate_oral_transcript),
             }
 
     except Exception as e:
