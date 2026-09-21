@@ -178,7 +178,7 @@ async def list_s3_assets(
     session_bond_year_map = {}
     try:
         from app.core.database import AsyncSessionLocal
-        from app.models.models import InterviewSession, Candidate, InterviewReport, InterviewAnalysis
+        from app.models.models import InterviewSession, Candidate, InterviewReport, InterviewAnalysis, SessionStatus
         from sqlalchemy import select
         from sqlalchemy.orm import selectinload
         from pathlib import Path

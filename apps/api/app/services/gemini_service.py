@@ -11,7 +11,8 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = settings.GEMINI_MODEL  # Configurable model name from environment settings
+_raw_model = (settings.GEMINI_MODEL or "gemini-3.6-flash").strip()
+GEMINI_MODEL = "gemini-3.6-flash" if "gemini-2.0-flash" in _raw_model else _raw_model
 
 # ── Gemini Client Setup (new google.genai SDK) ────────────────────────────────
 _genai_client = None

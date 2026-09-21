@@ -1,4 +1,4 @@
-﻿"""
+"""
 Layer 6: External Services Layer
 Manages LLM provider connectivity (Google Gemini / Groq / OpenAI), health checks, and fallback logic.
 """
@@ -10,13 +10,20 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+def _get_active_model_name() -> str:
+    m = (settings.GEMINI_MODEL or "gemini-3.6-flash").strip()
+    if "gemini-2.0-flash" in m:
+        return "gemini-3.6-flash"
+    return m
+
 def check_llm_health() -> Dict[str, Any]:
     """
-    Health check for LLM provider connectivity.
+    Health check for LLM provider connectivity with automatic fallback for deprecated model names.
     """
+    active_model = _get_active_model_name()
     status = {
         "provider": "google_gemini",
-        "model": settings.GEMINI_MODEL,
+        "model": active_model,
         "configured": bool(settings.GEMINI_API_KEY),
         "status": "offline"
     }
@@ -27,15 +34,19 @@ def check_llm_health() -> Dict[str, Any]:
         
     try:
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        # Test lightweight ping
-        model = genai.GenerativeModel(settings.GEMINI_MODEL)
-        resp = model.generate_content("ping", generation_config={"max_output_tokens": 5})
-        if resp and resp.text:
-            status["status"] = "healthy"
-            status["message"] = "Connected successfully to Gemini."
-        else:
-            status["status"] = "degraded"
-            status["message"] = "Model returned empty response."
+        for candidate_model in [active_model, "gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"]:
+            try:
+                model = genai.GenerativeModel(candidate_model)
+                resp = model.generate_content("ping", generation_config={"max_output_tokens": 5})
+                if resp and resp.text:
+                    status["model"] = candidate_model
+                    status["status"] = "healthy"
+                    status["message"] = f"Connected successfully to {candidate_model}."
+                    return status
+            except Exception:
+                continue
+        status["status"] = "degraded"
+        status["message"] = "Candidate Gemini models returned no response."
     except Exception as e:
         status["status"] = "error"
         status["message"] = str(e)
@@ -74,18 +85,21 @@ async def generate_grounded_response(prompt: str, context_chunks: list) -> str:
         f"GROUNDED ANSWER:"
     )
 
+    active_model = _get_active_model_name()
     if settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("mock"):
-        try:
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel(settings.GEMINI_MODEL)
-            resp = model.generate_content(
-                full_prompt,
-                generation_config={"temperature": 0.2, "max_output_tokens": 500}
-            )
-            if resp and resp.text:
-                return resp.text.strip()
-        except Exception as e:
-            logger.warning(f"Gemini grounded generation failed: {e}. Falling back to deterministic extractive synthesizer.")
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        for candidate_model in [active_model, "gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"]:
+            try:
+                model = genai.GenerativeModel(candidate_model)
+                resp = model.generate_content(
+                    full_prompt,
+                    generation_config={"temperature": 0.2, "max_output_tokens": 500}
+                )
+                if resp and resp.text:
+                    return resp.text.strip()
+            except Exception as e:
+                logger.warning(f"Gemini grounded generation with {candidate_model} failed: {e}.")
+        logger.warning("All Gemini candidate models failed. Falling back to deterministic extractive synthesizer.")
 
     # Resilient fallback synthesis when API is offline or key is inactive:
     # Extracts the most relevant sentences directly from top chunk
