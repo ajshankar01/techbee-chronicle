@@ -1382,7 +1382,6 @@ function EmailSegment({
               type="text"
               value={ccEmail}
               onChange={(e) => setCcEmail(e.target.value)}
-              placeholder="e.g. mentor@hcltech.com, cadre@hcltech.com (leave blank or optional)"
               className="flex-1 text-xs px-3 py-1.5 bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-800"
             />
           </div>
