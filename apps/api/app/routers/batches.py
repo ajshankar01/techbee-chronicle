@@ -321,16 +321,17 @@ async def create_batch(
 
     await db.commit()
 
-    # Trigger async invitation emails with calendar invites
+    # Dispatch invitation emails with calendar invites synchronously in worker thread pool
     if sessions_created:
-        background_tasks.add_task(
+        import anyio
+        await anyio.to_thread.run_sync(
             send_batch_invitations,
-            sessions=sessions_created,
-            batch_name=req.name,
-            batch_id=batch_id,
-            scheduled_dt=scheduled_dt,
-            expires_at=expires_at,
-            module_level=req.module_level or 1,
+            sessions_created,
+            req.name,
+            batch_id,
+            scheduled_dt,
+            expires_at,
+            req.module_level or 1,
         )
 
     return {
@@ -501,15 +502,26 @@ async def resend_batch_invitations(
         })
 
     if sessions_to_resend:
-        background_tasks.add_task(
+        import anyio
+        await anyio.to_thread.run_sync(
             send_batch_invitations,
-            sessions=sessions_to_resend,
-            batch_name=batch_name,
-            batch_id=batch_id,
-            scheduled_dt=scheduled_dt or datetime.now(timezone.utc),
-            expires_at=expires_at or (datetime.now(timezone.utc) + timedelta(hours=8)),
-            module_level=1,
+            sessions_to_resend,
+            batch_name,
+            batch_id,
+            scheduled_dt or datetime.now(timezone.utc),
+            expires_at or (datetime.now(timezone.utc) + timedelta(hours=8)),
+            1,
         )
+        # Immediately record email_sent_at timestamp
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for session, candidate in rows:
+            try:
+                meta = json.loads(session.notes or "{}")
+            except Exception:
+                meta = {}
+            meta["email_sent_at"] = now_iso
+            session.notes = json.dumps(meta)
+        await db.commit()
 
     return {"resent_count": len(sessions_to_resend)}
 
@@ -580,6 +592,17 @@ async def dispatch_batch_invitations(
         expires_at or (datetime.now(timezone.utc) + timedelta(hours=8)),
         1,
     )
+
+    # Immediately mark email_sent_at on all sessions in this batch
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for session, candidate in rows:
+        try:
+            meta = json.loads(session.notes or "{}")
+        except Exception:
+            meta = {}
+        meta["email_sent_at"] = now_iso
+        session.notes = json.dumps(meta)
+    await db.commit()
 
     return {
         "status": "success",
