@@ -13,18 +13,18 @@ import {
 
 const API = (process.env.NEXT_PUBLIC_API_URL || 'https://techbee-api.onrender.com').replace(/\/+$/, '');
 
-// Resilient fetch helper: tries direct API URL, falls back to Next.js proxy rewrite
+// Resilient fetch helper: uses same-origin Next.js rewrite proxy first (zero CORS issues), falls back to direct API
 async function fetchAPI(endpoint: string, init?: RequestInit): Promise<Response> {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   try {
-    const res = await fetch(`${API}${cleanEndpoint}`, init);
-    if (res.ok || res.status < 500) {
+    const res = await fetch(cleanEndpoint, init);
+    if (res.ok || (res.status < 500 && res.status !== 404)) {
       return res;
     }
-    return await fetch(cleanEndpoint, init);
+    return await fetch(`${API}${cleanEndpoint}`, init);
   } catch (err) {
     try {
-      return await fetch(cleanEndpoint, init);
+      return await fetch(`${API}${cleanEndpoint}`, init);
     } catch {
       throw err;
     }
