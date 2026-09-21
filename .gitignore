@@ -40,5 +40,6 @@ Thumbs.db
 *.jpg
 *.jpeg
 *.png
+!apps/web/public/**
 *.pdf
 sample_candidates.csv

@@ -8,6 +8,18 @@ import {
   LayoutDashboard, HardDrive, FileText, Clapperboard, CalendarPlus, BookOpen
 } from "lucide-react";
 
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+
+async function fetchAPI(endpoint: string, init?: RequestInit): Promise<Response> {
+  try {
+    const res = await fetch(`${API}${endpoint}`, init);
+    if (res.status < 500) return res;
+    return await fetch(endpoint, init);
+  } catch (err) {
+    return await fetch(endpoint, init);
+  }
+}
+
 interface CognitiveQuestion {
   id: string;
   domain: string;
@@ -62,8 +74,8 @@ export default function QuestionsPage() {
       const token = sessionStorage.getItem("teams_token") || "dev-token";
       
       const [resCog, resPsy] = await Promise.all([
-        fetch("http://127.0.0.1:8000/api/questions/cognitive", { headers: { Authorization: `Bearer ${token}` } }),
-        fetch("http://127.0.0.1:8000/api/questions/psychometric", { headers: { Authorization: `Bearer ${token}` } })
+        fetchAPI("/api/questions/cognitive", { headers: { Authorization: `Bearer ${token}` } }),
+        fetchAPI("/api/questions/psychometric", { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
       if (resCog.ok) {
@@ -90,7 +102,7 @@ export default function QuestionsPage() {
     try {
       setAdding(true);
       const token = sessionStorage.getItem("teams_token") || "dev-token";
-      const res = await fetch("http://127.0.0.1:8000/api/questions/cognitive", {
+      const res = await fetchAPI("/api/questions/cognitive", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -120,7 +132,7 @@ export default function QuestionsPage() {
     try {
       setAdding(true);
       const token = sessionStorage.getItem("teams_token") || "dev-token";
-      const res = await fetch("http://127.0.0.1:8000/api/questions/psychometric", {
+      const res = await fetchAPI("/api/questions/psychometric", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -143,7 +155,7 @@ export default function QuestionsPage() {
     try {
       setGenerating(true);
       const token = sessionStorage.getItem("teams_token") || "dev-token";
-      const res = await fetch(`http://127.0.0.1:8000/api/questions/generate/cognitive?domain=${encodeURIComponent(cogDomain)}`, {
+      const res = await fetchAPI(`/api/questions/generate/cognitive?domain=${encodeURIComponent(cogDomain)}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -167,7 +179,7 @@ export default function QuestionsPage() {
     try {
       setGenerating(true);
       const token = sessionStorage.getItem("teams_token") || "dev-token";
-      const res = await fetch(`http://127.0.0.1:8000/api/questions/generate/psychometric?trait=${encodeURIComponent(psyTrait)}`, {
+      const res = await fetchAPI(`/api/questions/generate/psychometric?trait=${encodeURIComponent(psyTrait)}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -190,7 +202,7 @@ export default function QuestionsPage() {
     try {
       setAdding(true);
       const token = sessionStorage.getItem("teams_token") || "dev-token";
-      const res = await fetch("http://127.0.0.1:8000/api/questions/cognitive", {
+      const res = await fetchAPI("/api/questions/cognitive", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -216,7 +228,7 @@ export default function QuestionsPage() {
     try {
       setAdding(true);
       const token = sessionStorage.getItem("teams_token") || "dev-token";
-      const res = await fetch("http://127.0.0.1:8000/api/questions/psychometric", {
+      const res = await fetchAPI("/api/questions/psychometric", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -240,7 +252,7 @@ export default function QuestionsPage() {
       setGeneratingBatch(true);
       setBatchSuccessMessage(null);
       const token = sessionStorage.getItem("teams_token") || "dev-token";
-      const res = await fetch("http://127.0.0.1:8000/api/questions/psychometric/generate-batch", {
+      const res = await fetchAPI("/api/questions/psychometric/generate-batch", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -259,7 +271,7 @@ export default function QuestionsPage() {
     if (!confirm("Delete this cognitive question?")) return;
     try {
       const token = sessionStorage.getItem("teams_token") || "dev-token";
-      await fetch(`http://127.0.0.1:8000/api/questions/cognitive/${id}`, {
+      await fetchAPI(`/api/questions/cognitive/${id}`, {
         method: "DELETE", headers: { Authorization: `Bearer ${token}` }
       });
       fetchQuestions();
@@ -270,7 +282,7 @@ export default function QuestionsPage() {
     if (!confirm("Delete this psychometric statement?")) return;
     try {
       const token = sessionStorage.getItem("teams_token") || "dev-token";
-      await fetch(`http://127.0.0.1:8000/api/questions/psychometric/${id}`, {
+      await fetchAPI(`/api/questions/psychometric/${id}`, {
         method: "DELETE", headers: { Authorization: `Bearer ${token}` }
       });
       fetchQuestions();
