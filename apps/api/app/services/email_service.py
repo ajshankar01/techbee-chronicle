@@ -306,37 +306,7 @@ def send_batch_invitations(
                 sent_count += 1
                 logger.info(f"✅ Email sent → {candidate_email} (batch {batch_id})")
 
-                # Update session notes with email_sent_at timestamp in database
-                try:
-                    import asyncio
-                    from app.core.database import AsyncSessionLocal
-                    from app.models.models import InterviewSession
-                    from sqlalchemy import select
-                    import json as _json
-
-                    async def update_sent_at(sid: str):
-                        async with AsyncSessionLocal() as db_session:
-                            import uuid as _uuid
-                            val_id = _uuid.UUID(sid) if isinstance(sid, str) else sid
-                            s_row = (await db_session.execute(select(InterviewSession).where(InterviewSession.id == val_id))).scalar_one_or_none()
-                            if s_row:
-                                notes_dict = _json.loads(s_row.notes or "{}")
-                                notes_dict["email_sent_at"] = datetime.now(timezone.utc).isoformat()
-                                s_row.notes = _json.dumps(notes_dict)
-                                await db_session.commit()
-                                logger.info(f"Updated email_sent_at for session {sid}")
-
-                    try:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            loop.create_task(update_sent_at(session_id))
-                        else:
-                            loop.run_until_complete(update_sent_at(session_id))
-                    except RuntimeError:
-                        asyncio.run(update_sent_at(session_id))
-
-                except Exception as db_e:
-                    logger.warning(f"Could not update email_sent_at for session {session_id}: {db_e}")
+                # Session note email_sent_at is stamped by the calling batch endpoint
 
             except Exception as e:
                 failed_count += 1

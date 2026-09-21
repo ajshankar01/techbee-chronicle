@@ -333,6 +333,19 @@ async def create_batch(
             expires_at,
             req.module_level or 1,
         )
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for session_info in sessions_created:
+            sid = session_info["session_id"]
+            res = await db.execute(select(InterviewSession).where(InterviewSession.id == uuid.UUID(sid)))
+            s_obj = res.scalar_one_or_none()
+            if s_obj:
+                try:
+                    s_meta = json.loads(s_obj.notes or "{}")
+                except Exception:
+                    s_meta = {}
+                s_meta["email_sent_at"] = now_iso
+                s_obj.notes = json.dumps(s_meta)
+        await db.commit()
 
     return {
         "batch_id": batch_id,
