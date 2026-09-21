@@ -866,112 +866,198 @@ async def submit_session_segment(
         db.add(analysis)
     
     seg_name = (req.segment or "").strip().lower()
+    current_pq = dict(analysis.per_question_analysis_json or {})
+
     if seg_name in ("cognitive", "seg2", "segment_2"):
-        correct_count = 0
-        attempted_count = 0
-        errors_count = 0
-        total_count = len(req.answers)
-        
+        from app.core.question_bank_data import COGNITIVE_QUESTIONS_DATA
+
+        ans_map = {}
+        for idx, a in enumerate(req.answers):
+            q_id_str = str(a.question_id).strip()
+            ans_map[q_id_str] = a.selected_index
+            ans_map[str(idx)] = a.selected_index
+            ans_map[f"cog_{idx+1}"] = a.selected_index
+
+        cognitive_results = []
         domain_correct = {"NUMERICAL": 0, "LOGICAL": 0, "VERBAL": 0, "PATTERN": 0, "PROCESSING": 0, "ATTENTION": 0, "ABSTRACT": 0}
         domain_total = {"NUMERICAL": 0, "LOGICAL": 0, "VERBAL": 0, "PATTERN": 0, "PROCESSING": 0, "ATTENTION": 0, "ABSTRACT": 0}
 
-        for ans in req.answers:
-            try:
-                q_uuid = uuid.UUID(ans.question_id)
-            except (ValueError, TypeError, AttributeError):
-                continue
+        for idx, cq_data in enumerate(COGNITIVE_QUESTIONS_DATA):
+            q_id = cq_data.get("id", f"cog_{idx+1}")
+            sel_idx = ans_map.get(q_id, ans_map.get(str(idx), ans_map.get(f"cog_{idx+1}")))
+            correct_idx = cq_data["correct_answer_index"]
+            is_corr = (sel_idx is not None and sel_idx == correct_idx)
+            dom = cq_data["domain"]
 
-            sq_res = await db.execute(
-                select(SessionCognitiveQuestion, CognitiveQuestion)
-                .join(CognitiveQuestion)
-                .where(SessionCognitiveQuestion.session_id == sess_uuid)
-                .where(SessionCognitiveQuestion.cognitive_question_id == q_uuid)
-            )
-            row = sq_res.first()
-            if row:
-                sq, cq = row
-                sq.selected_option_index = ans.selected_index
-                
-                domain_name = cq.domain.value
-                if domain_name not in domain_total:
-                    domain_total[domain_name] = 0
-                    domain_correct[domain_name] = 0
-                domain_total[domain_name] += 1
-                
-                if ans.selected_index is not None:
-                    attempted_count += 1
-                    if ans.selected_index == cq.correct_answer_index:
-                        correct_count += 1
-                        domain_correct[domain_name] += 1
-                    else:
-                        errors_count += 1
-        
-        if total_count > 0:
-            analysis.cognitive_ability_score = (correct_count / total_count) * 100
-            
-            # Speed metrics relative to 35 questions (blueprint total)
-            analysis.gross_speed = attempted_count / 35.0
-            analysis.accuracy = (correct_count / attempted_count * 100) if attempted_count > 0 else 0.0
-            analysis.throughput = correct_count / 35.0
-            analysis.net_score = correct_count - (errors_count / 3.0)
-            
-            # Compute domain-wise percentages for all 7 blueprint categories
-            def domain_pct(dom):
-                return (domain_correct[dom] / domain_total[dom] * 100) if domain_total.get(dom, 0) > 0 else 0.0
-            
-            logic_score      = domain_pct("LOGICAL")
-            numerical_score  = domain_pct("NUMERICAL")
-            verbal_score     = domain_pct("VERBAL")
-            pattern_score    = domain_pct("PATTERN")
-            processing_score = domain_pct("PROCESSING")
-            attention_score  = domain_pct("ATTENTION")
-            abstract_score   = domain_pct("ABSTRACT")
-            
-            # Weighted composite (adapt weights as needed)
-            comp_score = (
-                0.20 * logic_score +
-                0.15 * numerical_score +
-                0.15 * verbal_score +
-                0.15 * pattern_score +
-                0.15 * processing_score +
-                0.10 * attention_score +
-                0.10 * abstract_score
-            )
-            analysis.cognitive_composite_score = comp_score
-            
-            z_score = (comp_score - 50.0) / 10.0
-            analysis.t_score = 50.0 + 10.0 * z_score
-            
+            if dom not in domain_total:
+                domain_total[dom] = 0
+                domain_correct[dom] = 0
+            domain_total[dom] += 1
+            if is_corr:
+                domain_correct[dom] += 1
+
+            cognitive_results.append({
+                "question": cq_data["question_text"],
+                "domain": dom,
+                "difficulty": cq_data.get("difficulty", "MEDIUM"),
+                "options": cq_data["options"],
+                "selected_index": sel_idx,
+                "correct_index": correct_idx,
+                "is_correct": is_corr
+            })
+
+        attempted_count = sum(1 for c in cognitive_results if c["selected_index"] is not None)
+        correct_count = sum(1 for c in cognitive_results if c["is_correct"])
+        errors_count = attempted_count - correct_count
+        total_count = len(cognitive_results)
+
+        analysis.cognitive_ability_score = (correct_count / total_count * 100) if total_count > 0 else 0.0
+        analysis.gross_speed = round(attempted_count / 35.0, 2)
+        analysis.accuracy = round((correct_count / attempted_count * 100), 1) if attempted_count > 0 else 0.0
+        analysis.throughput = round(correct_count / 35.0, 2)
+        analysis.net_score = round(correct_count - (errors_count / 3.0), 2)
+
+        def domain_pct(d):
+            return round((domain_correct[d] / domain_total[d] * 100), 1) if domain_total.get(d, 0) > 0 else 0.0
+
+        comp_score = round(
+            0.20 * domain_pct("LOGICAL") +
+            0.15 * domain_pct("NUMERICAL") +
+            0.15 * domain_pct("VERBAL") +
+            0.15 * domain_pct("PATTERN") +
+            0.15 * domain_pct("PROCESSING") +
+            0.10 * domain_pct("ATTENTION") +
+            0.10 * domain_pct("ABSTRACT"),
+            1
+        )
+        analysis.cognitive_composite_score = comp_score
+        z_score = (comp_score - 50.0) / 10.0
+        analysis.t_score = round(50.0 + 10.0 * z_score, 1)
+
+        domain_breakdown = {}
+        for dom in domain_total.keys():
+            t = domain_total[dom]
+            c = domain_correct[dom]
+            att = sum(1 for item in cognitive_results if item["domain"] == dom and item["selected_index"] is not None)
+            domain_breakdown[dom.lower()] = {
+                "total": t,
+                "correct": c,
+                "attempted": att,
+                "accuracy_pct": round((c / att * 100), 1) if att > 0 else 0.0
+            }
+
+        current_pq["cognitive_results"] = cognitive_results
+        current_pq["cognitive_metrics"] = {
+            "gross_speed": analysis.gross_speed,
+            "accuracy": analysis.accuracy,
+            "throughput": analysis.throughput,
+            "net_score": analysis.net_score,
+            "t_score": analysis.t_score,
+            "cognitive_composite_score": comp_score,
+            "total_questions": total_count,
+            "attempted_count": attempted_count,
+            "correct_count": correct_count,
+            "wrong_count": errors_count,
+            "time_limit_minutes": 20,
+            "domain_breakdown": domain_breakdown,
+        }
+        analysis.per_question_analysis_json = current_pq
+
+        # Sync with SessionCognitiveQuestion if present in DB
+        try:
+            for ans in req.answers:
+                try:
+                    q_uuid = uuid.UUID(str(ans.question_id))
+                    sq_res = await db.execute(
+                        select(SessionCognitiveQuestion)
+                        .where(SessionCognitiveQuestion.session_id == sess_uuid)
+                        .where(SessionCognitiveQuestion.cognitive_question_id == q_uuid)
+                    )
+                    sq_item = sq_res.scalars().first()
+                    if sq_item:
+                        sq_item.selected_option_index = ans.selected_index
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning(f"Error syncing SessionCognitiveQuestion: {e}")
+
     elif seg_name in ("psychometric", "seg3", "segment_3"):
-        total_score = 0
-        max_possible = len(req.answers) * 5
-        for ans in req.answers:
-            try:
-                q_uuid = uuid.UUID(ans.question_id)
-            except (ValueError, TypeError, AttributeError):
-                continue
+        from app.core.question_bank_data import PSYCHOMETRIC_QUESTIONS_DATA
 
-            sq_res = await db.execute(
-                select(SessionPsychometricQuestion, PsychometricQuestion)
-                .join(PsychometricQuestion, SessionPsychometricQuestion.psychometric_question_id == PsychometricQuestion.id)
-                .where(SessionPsychometricQuestion.session_id == sess_uuid)
-                .where(SessionPsychometricQuestion.psychometric_question_id == q_uuid)
-            )
-            row = sq_res.first()
-            if row:
-                sq, pq = row
-                sq.selected_score = ans.selected_score
-                raw_score = ans.selected_score or 0
-                # If ideal_response is SD (Strongly Disagree), reverse score (6 - raw_score)
-                # 1 -> 5 pts, 2 -> 4 pts, 3 -> 3 pts, 4 -> 2 pts, 5 -> 1 pt
-                if (pq.ideal_response or "").upper() == "SD":
-                    effective_pts = (6 - raw_score) if raw_score > 0 else 0
-                else:
-                    effective_pts = raw_score
-                total_score += effective_pts
-                
-        if max_possible > 0:
-            analysis.psychometric_score = (total_score / max_possible) * 100
+        ans_map = {}
+        for idx, a in enumerate(req.answers):
+            q_id_str = str(a.question_id).strip()
+            s_val = a.selected_score if a.selected_score is not None else a.selected_index
+            ans_map[q_id_str] = s_val
+            ans_map[str(idx)] = s_val
+            ans_map[f"psy_{idx+1}"] = s_val
+
+        psychometric_results = []
+        trait_groups = {}
+        total_effective = 0
+
+        for idx, pq_data in enumerate(PSYCHOMETRIC_QUESTIONS_DATA):
+            q_id = pq_data.get("id", f"psy_{idx+1}")
+            raw_s = ans_map.get(q_id, ans_map.get(str(idx), ans_map.get(f"psy_{idx+1}")))
+            if raw_s is not None:
+                try:
+                    raw_s = int(raw_s)
+                except Exception:
+                    raw_s = 3
+            else:
+                raw_s = 3
+
+            is_sd = (pq_data.get("ideal_response") or "").upper() == "SD"
+            eff_s = (6 - raw_s) if is_sd else raw_s
+            total_effective += eff_s
+
+            tr = pq_data["trait"]
+            if tr not in trait_groups:
+                trait_groups[tr] = {"scores": [], "count": 0}
+            trait_groups[tr]["scores"].append(eff_s)
+            trait_groups[tr]["count"] += 1
+
+            psychometric_results.append({
+                "statement": pq_data["statement_text"],
+                "trait": tr,
+                "ideal_response": pq_data.get("ideal_response", "SA"),
+                "selected_score": raw_s,
+                "effective_score": eff_s
+            })
+
+        max_possible = len(psychometric_results) * 5
+        analysis.psychometric_score = round((total_effective / max_possible) * 100, 1)
+
+        trait_breakdown = {}
+        for tr, grp in trait_groups.items():
+            avg_s = sum(grp["scores"]) / len(grp["scores"]) if grp["scores"] else 0
+            trait_breakdown[tr] = {
+                "average_score": round(avg_s, 2),
+                "percentage_score": round((avg_s / 5.0) * 100, 1),
+                "items_count": grp["count"]
+            }
+
+        current_pq["psychometric_results"] = psychometric_results
+        current_pq["psychometric_trait_breakdown"] = trait_breakdown
+        analysis.per_question_analysis_json = current_pq
+
+        # Sync with SessionPsychometricQuestion if present in DB
+        try:
+            for ans in req.answers:
+                try:
+                    q_uuid = uuid.UUID(str(ans.question_id))
+                    sp_res = await db.execute(
+                        select(SessionPsychometricQuestion)
+                        .where(SessionPsychometricQuestion.session_id == sess_uuid)
+                        .where(SessionPsychometricQuestion.psychometric_question_id == q_uuid)
+                    )
+                    sp_item = sp_res.scalars().first()
+                    if sp_item:
+                        sp_item.selected_score = ans.selected_score
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning(f"Error syncing SessionPsychometricQuestion: {e}")
 
     # Store email submission (Segment 4) structured data
     if req.raw_data and req.raw_data.get("segment_type") == "email_submission":
@@ -982,7 +1068,6 @@ async def submit_session_segment(
             "body": req.raw_data.get("body", ""),
             "submitted_at": datetime.now(timezone.utc).isoformat()
         }
-        current_pq = dict(analysis.per_question_analysis_json or {})
         current_pq["email_submission"] = email_info
         analysis.per_question_analysis_json = current_pq
 
@@ -1000,13 +1085,13 @@ async def submit_session_segment(
 
     # Store oral segment transcripts in raw notes & structured JSON for reporting
     if req.raw_data and req.raw_data.get("transcript"):
-        segment_label = req.segment  # e.g. "seg1" or "oral"
+        segment_label = req.segment or "seg1"
         transcript_text = req.raw_data["transcript"].strip()
         if transcript_text:
-            current_pq = dict(analysis.per_question_analysis_json or {})
             oral_transcripts = dict(current_pq.get("oral_transcripts") or {})
             oral_transcripts[segment_label] = transcript_text
             oral_transcripts["seg1"] = transcript_text
+            oral_transcripts["oral"] = transcript_text
             current_pq["oral_transcripts"] = oral_transcripts
             analysis.per_question_analysis_json = current_pq
 
@@ -1014,6 +1099,46 @@ async def submit_session_segment(
             marker = f"[TRANSCRIPT:{segment_label}]"
             if marker not in existing:
                 analysis.summary_text = existing + f"\n{marker}\n{transcript_text}\n"
+
+            # Create or update SessionQuestion and CandidateResponse
+            try:
+                sq_res = await db.execute(
+                    select(SessionQuestion).where(
+                        SessionQuestion.session_id == sess_uuid,
+                        SessionQuestion.question_type == QuestionType.COMMUNICATION
+                    )
+                )
+                sq_obj = sq_res.scalars().first()
+                if not sq_obj:
+                    sq_obj = SessionQuestion(
+                        id=uuid.uuid4(),
+                        session_id=sess_uuid,
+                        question_type=QuestionType.COMMUNICATION,
+                        question_text="Could you start by telling us about yourself, your journey so far, and the core technologies you're most passionate about?",
+                        question_source=QuestionSource.AI_GENERATED,
+                        order_index=1,
+                    )
+                    db.add(sq_obj)
+                    await db.flush()
+
+                cr_res = await db.execute(
+                    select(CandidateResponse).where(
+                        CandidateResponse.session_id == sess_uuid,
+                        CandidateResponse.question_id == sq_obj.id
+                    )
+                )
+                cr_obj = cr_res.scalars().first()
+                if not cr_obj:
+                    db.add(CandidateResponse(
+                        id=uuid.uuid4(),
+                        session_id=sess_uuid,
+                        question_id=sq_obj.id,
+                        transcript_text=transcript_text,
+                    ))
+                else:
+                    cr_obj.transcript_text = transcript_text
+            except Exception as cr_err:
+                logger.warning(f"Error persisting CandidateResponse: {cr_err}")
 
     await db.commit()
     return {"message": "Segment submitted successfully"}

@@ -126,6 +126,15 @@ export function useInterviewSession(): UseInterviewSessionReturn {
           sessionStorage.setItem("candidate_name", data.candidate_name);
           sessionStorage.setItem("candidate_display_name", data.candidate_name);
         }
+        if (data.candidate_email) {
+          setCandidateEmail(data.candidate_email);
+          sessionStorage.setItem("candidate_email", data.candidate_email);
+        }
+        if (data.candidate_sap_id || data.sap_id) {
+          const s = data.candidate_sap_id || data.sap_id;
+          setCandidateSapId(s);
+          sessionStorage.setItem("candidate_sap_id", s);
+        }
 
         if (data.questions?.length > 0) {
           const actualName = data.candidate_name || name;
@@ -159,6 +168,14 @@ export function useInterviewSession(): UseInterviewSessionReturn {
             setCandidateName(profile.name);
             sessionStorage.setItem("candidate_name", profile.name);
             sessionStorage.setItem("candidate_display_name", profile.name);
+          }
+          if (profile.email) {
+            setCandidateEmail(profile.email);
+            sessionStorage.setItem("candidate_email", profile.email);
+          }
+          if (profile.sap_id) {
+            setCandidateSapId(profile.sap_id);
+            sessionStorage.setItem("candidate_sap_id", profile.sap_id);
           }
           const bYear = savedBondYear
             ? parseInt(savedBondYear, 10)

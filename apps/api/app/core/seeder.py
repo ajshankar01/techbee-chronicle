@@ -222,6 +222,48 @@ async def seed_question_bank(db: AsyncSession):
     else:
         logger.info("ℹ️ Question bank already has all seeded questions. Skipping.")
 
+    # ── Seed Cognitive Questions (35 ITES Speed Test items) ───────────────────
+    from app.models.models import CognitiveQuestion, CognitiveDomain, QuestionDifficulty, QuestionStatus, PsychometricQuestion
+    from app.core.question_bank_data import COGNITIVE_QUESTIONS_DATA, PSYCHOMETRIC_QUESTIONS_DATA
+    from sqlalchemy import func
+
+    cog_cnt_res = await db.execute(select(func.count(CognitiveQuestion.id)))
+    cog_cnt = cog_cnt_res.scalar() or 0
+    if cog_cnt < 35:
+        logger.info(f"🌱 Seeding {len(COGNITIVE_QUESTIONS_DATA)} ITES Cognitive Questions...")
+        for q in COGNITIVE_QUESTIONS_DATA:
+            domain_enum = CognitiveDomain[q["domain"]] if isinstance(q["domain"], str) else q["domain"]
+            diff_enum = QuestionDifficulty[q["difficulty"]] if isinstance(q["difficulty"], str) else q["difficulty"]
+            db.add(CognitiveQuestion(
+                domain=domain_enum,
+                difficulty=diff_enum,
+                subcategory=q.get("subcategory", f"{q['domain']}_CORE"),
+                question_text=q["question_text"],
+                options=q["options"],
+                correct_answer_index=q["correct_answer_index"],
+                explanation=q.get("explanation", ""),
+                status=QuestionStatus.ACTIVE,
+                estimated_time=35,
+                is_active=True
+            ))
+        await db.flush()
+        logger.info("✅ Seeded 35 ITES Cognitive Questions successfully!")
+
+    # ── Seed Psychometric Questions (15 Balanced Items) ───────────────────────
+    psy_cnt_res = await db.execute(select(func.count(PsychometricQuestion.id)))
+    psy_cnt = psy_cnt_res.scalar() or 0
+    if psy_cnt < 15:
+        logger.info(f"🌱 Seeding {len(PSYCHOMETRIC_QUESTIONS_DATA)} Psychometric Questions...")
+        for p in PSYCHOMETRIC_QUESTIONS_DATA:
+            db.add(PsychometricQuestion(
+                trait=p["trait"],
+                statement_text=p["statement_text"],
+                ideal_response=p["ideal_response"],
+                is_active=True
+            ))
+        await db.flush()
+        logger.info("✅ Seeded 15 Psychometric Questions successfully!")
+
     # Check if candidates exist
     from app.models.models import Candidate, HRUser, UserRole, InterviewSession, SessionStatus, AnalysisResult
     import uuid

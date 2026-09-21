@@ -101,16 +101,28 @@ async def get_session_report(
         except ValueError:
             session_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, session_id)
 
+        # Query InterviewSession first so reports can be viewed even before InterviewReport is generated
         result = await db.execute(
-            select(InterviewReport, InterviewSession, Candidate, AnalysisResult)
-            .join(InterviewSession, InterviewReport.session_id == InterviewSession.id)
+            select(InterviewSession, Candidate, InterviewReport, AnalysisResult)
             .join(Candidate, InterviewSession.candidate_id == Candidate.id)
+            .outerjoin(InterviewReport, InterviewReport.session_id == InterviewSession.id)
             .outerjoin(AnalysisResult, AnalysisResult.session_id == InterviewSession.id)
-            .where(InterviewReport.session_id == session_uuid)
+            .where(InterviewSession.id == session_uuid)
         )
         row = result.first()
+        if not row:
+            # Also check if query was made by report ID instead of session ID
+            rep_check = await db.execute(
+                select(InterviewSession, Candidate, InterviewReport, AnalysisResult)
+                .join(InterviewSession, InterviewReport.session_id == InterviewSession.id)
+                .join(Candidate, InterviewSession.candidate_id == Candidate.id)
+                .outerjoin(AnalysisResult, AnalysisResult.session_id == InterviewSession.id)
+                .where(InterviewReport.id == session_uuid)
+            )
+            row = rep_check.first()
+
         if row:
-            report, session, candidate, analysis = row
+            session, candidate, report, analysis = row
             scores = {}
             if analysis:
                 scores = {
@@ -147,6 +159,8 @@ async def get_session_report(
                             "question_type": sq.question_type.name if sq.question_type else ""
                         })
 
+            pq_json = analysis.per_question_analysis_json or {} if analysis else {}
+
             # Fetch cognitive answers directly from the junction table
             cognitive_results = []
             c_res = await db.execute(
@@ -167,6 +181,10 @@ async def get_session_report(
                                    sq.selected_option_index == cq.correct_answer_index)
                 })
 
+            # If junction table was empty, fallback to stored cognitive_results in analysis json
+            if not cognitive_results and pq_json.get("cognitive_results"):
+                cognitive_results = pq_json.get("cognitive_results")
+
             # Fetch psychometric answers directly from junction table
             psychometric_results = []
             p_res = await db.execute(
@@ -186,6 +204,10 @@ async def get_session_report(
                     "selected_score": raw_s,
                     "effective_score": eff_s
                 })
+
+            # If junction table was empty, fallback to stored psychometric_results in analysis json
+            if not psychometric_results and pq_json.get("psychometric_results"):
+                psychometric_results = pq_json.get("psychometric_results")
 
             # Calculate cognitive metrics and domain breakdown
             cog_attempted = sum(1 for c in cognitive_results if c.get("selected_index") is not None)
@@ -921,14 +943,28 @@ async def generate_and_upload_pdf(
                 if prev_analysis and prev_analysis.profile_snapshot:
                     previous_snapshot = prev_analysis.profile_snapshot
 
+            # Inject oral transcript and email submission into session_data for comprehensive Gemini evaluation
+            if existing_ar and existing_ar.per_question_analysis_json:
+                gen_email = existing_ar.per_question_analysis_json.get("email_submission")
+                gen_oral = existing_ar.per_question_analysis_json.get("oral_transcripts", {}).get("seg1")
+                if gen_oral and not any(r.get("type") == "oral_intro" for r in session_data["responses"]):
+                    session_data["responses"].insert(0, {
+                        "type": "oral_intro",
+                        "question": "Could you start by telling us about yourself, your journey so far, and the core technologies you are most passionate about?",
+                        "response": gen_oral
+                    })
+            else:
+                gen_email = None
+
             analysis = None
-            # Only run gemini_analyze if no prior summary exists AND candidate responses are provided in req
-            has_candidate_responses = req.transcript and any(t.speaker == "candidate" and t.text.strip() for t in req.transcript)
-            if (not existing_ar or not existing_ar.summary_text) and has_candidate_responses:
+            has_candidate_responses = any(r.get("response", "").strip() for r in session_data.get("responses", []))
+            if has_candidate_responses or gen_email:
                 analysis = await gemini_analyze(
                     session_data=session_data,
                     previous_snapshot=previous_snapshot,
-                    bond_year=bond_year
+                    bond_year=bond_year,
+                    existing_analysis=existing_ar,
+                    email_submission=gen_email
                 )
                 if analysis:
                     gemini_scores = analysis.get("scores", {})
@@ -1023,6 +1059,13 @@ async def generate_and_upload_pdf(
                         "selected_score": sq.selected_score if sq.selected_score is not None else 3,
                     })
 
+                # Fallback to per_question_analysis_json if table rows are empty
+                if not raw_cog_list and existing_ar and existing_ar.per_question_analysis_json:
+                    raw_cog_list = existing_ar.per_question_analysis_json.get("cognitive_results") or []
+                if not raw_psy_list and existing_ar and existing_ar.per_question_analysis_json:
+                    raw_psy_list = existing_ar.per_question_analysis_json.get("psychometric_results") or []
+
+                # Compute cog_metrics from existing_ar or raw_cog_list
                 if existing_ar and existing_ar.gross_speed is not None:
                     cog_metrics = {
                         "Gross Speed": f"{round(existing_ar.gross_speed * 100, 1)}%",
@@ -1032,32 +1075,30 @@ async def generate_and_upload_pdf(
                         "T-Score": f"{round(existing_ar.t_score, 1)}",
                         "Composite": f"{round(existing_ar.cognitive_composite_score, 1)}%",
                     }
-                else:
-                    if sq_rows:
-                        total_c = len(sq_rows)
-                        attempted_c = sum(1 for sq, cq in sq_rows if sq.selected_option_index is not None)
-                        correct_c = sum(1 for sq, cq in sq_rows if sq.selected_option_index is not None and sq.selected_option_index == cq.correct_answer_index)
-                        errors_c = attempted_c - correct_c
-                        gross_spd = (attempted_c / 35.0) * 100
-                        acc = (correct_c / attempted_c * 100) if attempted_c > 0 else 0.0
-                        thru = (correct_c / 35.0) * 100
-                        net = correct_c - (errors_c / 3.0)
-                        comp = (correct_c / total_c * 100) if total_c > 0 else 0.0
-                        t_sc = 50.0 + (comp - 50.0)
-                        cog_metrics = {
-                            "Gross Speed": f"{round(gross_spd, 1)}%",
-                            "Accuracy": f"{round(acc, 1)}%",
-                            "Throughput": f"{round(thru, 1)}%",
-                            "Net Score": f"{round(net, 1)}",
-                            "T-Score": f"{round(t_sc, 1)}",
-                            "Composite": f"{round(comp, 1)}%",
-                        }
+                elif raw_cog_list:
+                    tot = len(raw_cog_list)
+                    att = sum(1 for c in raw_cog_list if c.get("selected_index") is not None)
+                    cor = sum(1 for c in raw_cog_list if c.get("is_correct") is True)
+                    err = att - cor
+                    g_spd = (att / 5.0)
+                    acc = round((cor / att * 100), 1) if att > 0 else 0.0
+                    thr = round((cor / 5.0), 2)
+                    net = round(cor - (0.25 * err), 2)
+                    comp = round(0.4 * acc + 0.3 * (g_spd / 4.0 * 100) + 0.3 * 50.0, 1)
+                    cog_metrics = {
+                        "Gross Speed": f"{round(g_spd, 2)} Q/m",
+                        "Accuracy": f"{acc}%",
+                        "Throughput": f"{thr} C/m",
+                        "Net Score": f"{net}",
+                        "T-Score": "52.0",
+                        "Composite": f"{comp}%",
+                    }
 
-                if spq_rows:
+                if raw_psy_list:
                     trait_scores: dict = {}
-                    for sq, pq in spq_rows:
-                        score = sq.selected_score if sq.selected_score is not None else 4
-                        trait_scores.setdefault(pq.trait, []).append(score)
+                    for p in raw_psy_list:
+                        score = p.get("selected_score", 4)
+                        trait_scores.setdefault(p.get("trait", "General"), []).append(score)
                     for t_name, sc_list in trait_scores.items():
                         avg_score = sum(sc_list) / (len(sc_list) * 5) * 100
                         psy_metrics[t_name] = f"{round(avg_score, 1)}%"
@@ -1091,6 +1132,21 @@ async def generate_and_upload_pdf(
             rep_row = rep_check.scalar_one_or_none()
             if rep_row and rep_row.full_transcript_json:
                 pdf_transcript = rep_row.full_transcript_json
+
+        # Ensure Segment 1 oral transcript is in pdf_transcript
+        oral_dict = _parse_oral_transcripts(summary_text, existing_ar.per_question_analysis_json if (existing_ar and existing_ar.per_question_analysis_json) else None)
+        oral_txt = oral_dict.get("seg1") or oral_dict.get("oral") or ""
+        if oral_txt and not any(t.get("question_type") == "oral_intro" for t in pdf_transcript):
+            pdf_transcript.insert(0, {
+                "speaker": "candidate",
+                "text": oral_txt,
+                "question_type": "oral_intro"
+            })
+            pdf_transcript.insert(0, {
+                "speaker": "aria",
+                "text": "Could you start by telling us about yourself, your journey so far, and the core technologies you're most passionate about?",
+                "question_type": "oral_intro"
+            })
 
         report_data = {
             "session_id": session_id,
@@ -1135,6 +1191,8 @@ async def generate_and_upload_pdf(
             "transcript": pdf_transcript,
             "cognitive_results": raw_cog_list if 'raw_cog_list' in locals() else [],
             "psychometric_results": raw_psy_list if 'raw_psy_list' in locals() else [],
+            "oral_transcripts": oral_dict,
+            "email_submission": email_sub,
         }
 
         pdf_bytes = await generate_interview_pdf(report_data, template_id)
@@ -1243,10 +1301,14 @@ async def generate_and_upload_pdf(
                 if scores.get("vision_and_mission") is not None:
                     analysis_db_obj.vision_and_mission_score = scores["vision_and_mission"]
 
-                # Merge per_question_analysis_json to preserve email_submission and email_evaluation
+                # Merge per_question_analysis_json to preserve email_submission and update Gemini evaluations
                 curr_pq = dict(analysis_db_obj.per_question_analysis_json or {})
-                if 'analysis' in locals() and analysis and analysis.get("advanced_report_json"):
-                    curr_pq.update(analysis.get("advanced_report_json"))
+                if 'analysis' in locals() and analysis:
+                    if analysis.get("advanced_report_json"):
+                        curr_pq.update(analysis.get("advanced_report_json"))
+                    for k in ("communication_evaluation", "email_evaluation", "email_writing_score", "vision_and_mission_evaluation", "corporate_survival_evaluation", "granular_improvements", "yoy_audit"):
+                        if analysis.get(k):
+                            curr_pq[k] = analysis[k]
                 analysis_db_obj.per_question_analysis_json = curr_pq
 
                 if summary_text:
