@@ -43,7 +43,7 @@ const nextConfig = {
   // Proxy FastAPI-specific routes to the backend (avoids CORS + hardcoded URLs in components)
   // Local Next.js handlers (/api/s3-list, /api/lambda-followup) are NOT proxied
   async rewrites() {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "https://techbee-api.onrender.com").replace(/\/+$/, '');
     return [
       { source: "/api/hr/:path*",          destination: `${apiBase}/api/hr/:path*` },
       { source: "/api/interview/:path*",   destination: `${apiBase}/api/interview/:path*` },

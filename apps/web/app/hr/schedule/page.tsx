@@ -11,7 +11,7 @@ import {
   ShieldCheck, UserX, Settings, Trash2, Plus, BookOpen
 } from 'lucide-react';
 
-const API = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+const API = (process.env.NEXT_PUBLIC_API_URL || 'https://techbee-api.onrender.com').replace(/\/+$/, '');
 
 // Resilient fetch helper: tries direct API URL, falls back to Next.js proxy rewrite
 async function fetchAPI(endpoint: string, init?: RequestInit): Promise<Response> {
@@ -229,8 +229,8 @@ export default function SchedulePage() {
         const err = await res.json().catch(() => ({}));
         setResolveError(err.detail?.error || err.detail || `Server error (${res.status})`);
       }
-    } catch (e) {
-      setResolveError('Network error — is the API server running on port 8000?');
+    } catch (e: any) {
+      setResolveError(`Connection issue: ${e.message || 'Unable to reach the server'}`);
       console.error(e);
     }
     finally { setResolving(false); }
