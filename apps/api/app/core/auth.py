@@ -28,9 +28,8 @@ _jwks_client = PyJWKClient(
 
 def decode_teams_token(token: str) -> dict:
     """Decode and validate a Microsoft Teams SSO JWT token"""
-    # SECURITY: dev-token bypass is ONLY allowed in development environment.
-    # In production this path is never reachable because APP_ENV != "development".
-    if settings.APP_ENV == "development" and (token.startswith("dev-token") or token == "dev-token"):
+    # SECURITY: dev-token bypass is allowed in development environment or when Azure SSO is unconfigured.
+    if (settings.APP_ENV == "development" or not settings.AZURE_CLIENT_ID or settings.AZURE_CLIENT_ID.startswith("0000")) and (token.startswith("dev-token") or token == "dev-token"):
         email = "ajay.shankar@hcltech.com"
         name = "Ajay Shankar"
         role = "hr_manager"

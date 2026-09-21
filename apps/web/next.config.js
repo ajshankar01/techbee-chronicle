@@ -48,6 +48,7 @@ const nextConfig = {
       { source: "/api/hr/:path*",          destination: `${apiBase}/api/hr/:path*` },
       { source: "/api/interview/:path*",   destination: `${apiBase}/api/interview/:path*` },
       { source: "/api/questions/:path*",   destination: `${apiBase}/api/questions/:path*` },
+      { source: "/api/reports/:path*",     destination: `${apiBase}/api/reports/:path*` },
       { source: "/api/health",             destination: `${apiBase}/api/health` },
       { source: "/api/auth/:path*",        destination: `${apiBase}/api/auth/:path*` },
     ];
