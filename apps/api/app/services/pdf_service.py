@@ -206,21 +206,40 @@ async def generate_interview_pdf(report_data: dict, template_id: int = 1) -> byt
         elements.append(Paragraph(f"<b>Cited Evidence:</b> <i>\"{comm_eval['evidence_quote']}\"</i>", S('c_ev', fontName='Helvetica-Oblique', fontSize=8.5, leading=11, textColor=TEAL)))
 
     # Verbatim Spoken Transcript Box
+    oral_transcripts_dict = report_data.get("oral_transcripts") or {}
+    raw_spoken = (
+        oral_transcripts_dict.get("seg1") or 
+        oral_transcripts_dict.get("oral") or 
+        oral_transcripts_dict.get("oral_intro") or ""
+    )
+    if not raw_spoken:
+        for t in transcript:
+            if t.get("speaker") == "candidate" and t.get("text"):
+                raw_spoken = t.get("text")
+                break
+
     tb = comm_eval.get("transcript_breakdown") or {}
-    oral_intro = tb.get("self_introduction") or ""
+    oral_intro = tb.get("self_introduction") or raw_spoken or ""
     oral_journey = tb.get("journey_so_far") or ""
     oral_tech = tb.get("core_technologies") or ""
-    if oral_intro or oral_journey or oral_tech:
+
+    if raw_spoken or oral_intro or oral_journey or oral_tech:
         elements.append(Spacer(1, 4))
         oral_lines = []
-        if oral_intro: oral_lines.append(f"<b>1. Introduction:</b> <i>\"{oral_intro}\"</i>")
-        if oral_journey: oral_lines.append(f"<b>2. Journey So Far:</b> <i>\"{oral_journey}\"</i>")
-        if oral_tech: oral_lines.append(f"<b>3. Core Tech:</b> <i>\"{oral_tech}\"</i>")
-        t_oral = Table([[Paragraph("<br/><br/>".join(oral_lines), S('t_oral_p', fontName='Helvetica', fontSize=8, leading=10, textColor=SLATE_700))]], colWidths=[535])
+        if raw_spoken:
+            oral_lines.append(f"<b>Candidate Verbatim Speech:</b><br/><i>\"{raw_spoken}\"</i>")
+        if oral_intro and oral_intro != raw_spoken:
+            oral_lines.append(f"<b>1. Introduction:</b> <i>\"{oral_intro}\"</i>")
+        if oral_journey:
+            oral_lines.append(f"<b>2. Journey So Far:</b> <i>\"{oral_journey}\"</i>")
+        if oral_tech:
+            oral_lines.append(f"<b>3. Core Tech:</b> <i>\"{oral_tech}\"</i>")
+
+        t_oral = Table([[Paragraph("<br/><br/>".join(oral_lines), S('t_oral_p', fontName='Helvetica', fontSize=8.5, leading=11, textColor=SLATE_700))]], colWidths=[535])
         t_oral.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8fafc')),
-            ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#cbd5e1')),
-            ('PADDING', (0, 0), (-1, -1), 5),
+            ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#c7d2fe')),
+            ('PADDING', (0, 0), (-1, -1), 6),
         ]))
         elements.append(t_oral)
 
@@ -514,6 +533,43 @@ async def generate_interview_pdf(report_data: dict, template_id: int = 1) -> byt
         ]))
         elements.append(t_audit)
         elements.append(Spacer(1, 10))
+
+        # Item-by-item Cognitive Test Audit Trail
+        if cog_results:
+            elements.append(Paragraph(f"Segment 2 Item Breakdown ({len(cog_results)} Questions):", h3_s))
+            cog_detail_rows = [
+                [Paragraph("<b>#</b>", bold_s), Paragraph("<b>Question &amp; Options</b>", bold_s), Paragraph("<b>Candidate Choice</b>", bold_s), Paragraph("<b>Verdict</b>", bold_s)]
+            ]
+            for idx, item in enumerate(cog_results[:15], 1):  # Show up to first 15 for concise high-density layout
+                q_txt = item.get("question", f"Question {idx}")
+                sel_idx = item.get("selected_index")
+                opts = item.get("options", [])
+                sel_text = opts[sel_idx] if (sel_idx is not None and 0 <= sel_idx < len(opts)) else (f"Option {sel_idx + 1}" if sel_idx is not None else "Unattempted")
+                is_cor = item.get("is_correct")
+                v_html = "<font color='#16a34a'><b>Correct</b></font>" if is_cor else "<font color='#dc2626'><b>Incorrect</b></font>"
+                cog_detail_rows.append([
+                    Paragraph(str(idx), S('c_num', fontSize=7.5)),
+                    Paragraph(f"<b>{q_txt}</b>", S('c_q', fontSize=7.5, leading=9.5)),
+                    Paragraph(sel_text, S('c_sel', fontSize=7.5, leading=9.5)),
+                    Paragraph(v_html, S('c_v', fontSize=7.5))
+                ])
+            if len(cog_results) > 15:
+                cog_detail_rows.append([
+                    Paragraph("...", S('c_dots', fontSize=7.5)),
+                    Paragraph(f"<i>... and {len(cog_results) - 15} additional questions recorded in full digital audit trail</i>", S('c_more', fontSize=7.5, fontName='Helvetica-Oblique')),
+                    Paragraph("-", S('c_dash', fontSize=7.5)),
+                    Paragraph("Audited", S('c_aud', fontSize=7.5))
+                ])
+
+            t_cog_detail = Table(cog_detail_rows, colWidths=[20, 315, 120, 80])
+            t_cog_detail.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), SLATE_100),
+                ('GRID', (0, 0), (-1, -1), 0.3, SLATE_200),
+                ('PADDING', (0, 0), (-1, -1), 3.5),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ]))
+            elements.append(t_cog_detail)
+            elements.append(Spacer(1, 10))
 
     doc.build(elements)
     buffer.seek(0)

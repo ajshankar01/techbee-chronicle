@@ -1157,8 +1157,31 @@ async def generate_and_upload_pdf(
                 pdf_transcript = rep_row.full_transcript_json
 
         # Ensure Segment 1 oral transcript is in pdf_transcript
-        oral_dict = _parse_oral_transcripts(summary_text, existing_ar.per_question_analysis_json if (existing_ar and existing_ar.per_question_analysis_json) else None)
-        oral_txt = oral_dict.get("seg1") or oral_dict.get("oral") or ""
+        cr_transcript_text = ""
+        if session_uuid:
+            try:
+                cr_oral_q = await db.execute(
+                    select(CandidateResponse.transcript_text)
+                    .join(SessionQuestion, SessionQuestion.id == CandidateResponse.question_id)
+                    .where(
+                        CandidateResponse.session_id == session_uuid,
+                        CandidateResponse.transcript_text.isnot(None),
+                        CandidateResponse.transcript_text != ""
+                    )
+                    .order_by(SessionQuestion.order_index)
+                )
+                cr_oral_first = cr_oral_q.scalars().first()
+                if cr_oral_first:
+                    cr_transcript_text = cr_oral_first.strip()
+            except Exception as cr_lookup_err:
+                logger.warning(f"Error querying CandidateResponse for PDF: {cr_lookup_err}")
+
+        oral_dict = _parse_oral_transcripts(
+            summary_text,
+            existing_ar.per_question_analysis_json if (existing_ar and existing_ar.per_question_analysis_json) else None,
+            cr_transcript_text
+        )
+        oral_txt = oral_dict.get("seg1") or oral_dict.get("oral") or oral_dict.get("oral_intro") or cr_transcript_text or ""
         if oral_txt and not any(t.get("question_type") == "oral_intro" for t in pdf_transcript):
             pdf_transcript.insert(0, {
                 "speaker": "candidate",
