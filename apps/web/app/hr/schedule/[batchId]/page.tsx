@@ -142,14 +142,23 @@ export default function BatchDetailPage() {
     setResending(true);
     setResendStatus(null);
     try {
-      const res = await fetchAPI(`/api/hr/batches/${batchId}/resend`, {
+      // Use direct dispatch endpoint for immediate, verified delivery
+      let res = await fetchAPI(`/api/hr/batches/${batchId}/dispatch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({}),
       });
+      if (!res.ok && res.status === 404) {
+        res = await fetchAPI(`/api/hr/batches/${batchId}/resend`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({}),
+        });
+      }
       if (res.ok) {
         const data = await res.json();
-        setResendStatus(`Invitations sent successfully to ${data.resent_count || 0} candidate(s)!`);
+        const count = data.processed_count || data.resent_count || 0;
+        setResendStatus(`Invitations sent successfully to ${count} candidate(s)!`);
         setTimeout(() => setResendStatus(null), 5000);
       } else {
         setResendStatus('Failed to resend invitations.');

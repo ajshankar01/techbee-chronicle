@@ -514,6 +514,80 @@ async def resend_batch_invitations(
     return {"resent_count": len(sessions_to_resend)}
 
 
+# ── POST /api/hr/batches/{batch_id}/dispatch — Direct synchronous dispatch ────
+
+@router.post("/batches/{batch_id}/dispatch")
+async def dispatch_batch_invitations(
+    batch_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Directly and synchronously dispatch emails for a batch.
+    Executes in a thread pool and returns the actual delivery results immediately.
+    """
+    import json
+    import anyio
+
+    result = await db.execute(
+        select(InterviewSession, Candidate).join(
+            Candidate, InterviewSession.candidate_id == Candidate.id
+        ).where(
+            and_(
+                InterviewSession.notes.like(f'%"batch_id": "{batch_id}"%'),
+                InterviewSession.status == SessionStatus.PENDING
+            )
+        )
+    )
+    rows = result.all()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="No pending sessions found for this batch")
+
+    sessions_to_send = []
+    scheduled_dt = None
+    expires_at = None
+    batch_name = "Batch Interview"
+
+    for session, candidate in rows:
+        try:
+            meta = json.loads(session.notes or "{}")
+        except Exception:
+            meta = {}
+
+        batch_name = meta.get("batch_name", batch_name)
+        if session.scheduled_at:
+            scheduled_dt = session.scheduled_at
+        try:
+            expires_at = datetime.fromisoformat(meta.get("token_expires_at", ""))
+        except Exception:
+            expires_at = (scheduled_dt or datetime.now(timezone.utc)) + timedelta(hours=8)
+
+        sessions_to_send.append({
+            "session_id": str(session.id),
+            "candidate_id": str(candidate.id),
+            "candidate_name": candidate.display_name,
+            "candidate_email": candidate.email,
+            "access_token": meta.get("access_token", secrets.token_urlsafe(32)),
+        })
+
+    # Run directly in worker thread pool
+    await anyio.to_thread.run_sync(
+        send_batch_invitations,
+        sessions_to_send,
+        batch_name,
+        batch_id,
+        scheduled_dt or datetime.now(timezone.utc),
+        expires_at or (datetime.now(timezone.utc) + timedelta(hours=8)),
+        1,
+    )
+
+    return {
+        "status": "success",
+        "batch_id": batch_id,
+        "processed_count": len(sessions_to_send)
+    }
+
+
 # ── POST /api/hr/batches/register-and-resolve — Auto-register and resolve ──
 
 @router.post("/batches/register-and-resolve")
