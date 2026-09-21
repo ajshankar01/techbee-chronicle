@@ -940,12 +940,6 @@ export default function ReportsPage() {
                           >
                             <BarChart3 size={13} /> Detailed Report
                           </button>
-                          <button onClick={() => window.open(r.presign_url, '_blank')} style={{ background: 'var(--gradient-brand)', border: 'none', borderRadius: 8, padding: '8px 12px', color: '#FFFFFF', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s', fontWeight: 'bold', boxShadow: '0 4px 0 #3b1bb6, 0 4px 10px rgba(79,70,229,0.2)' }}>
-                            <ExternalLink size={13} /> View
-                          </button>
-                          <a href={r.presign_url} download={`Report_${r.candidate_name}_${r.session_id}.pdf`} style={{ background: 'rgba(79,70,229,0.08)', border: '1px solid rgba(79,70,229,0.15)', borderRadius: 8, padding: '8px 12px', color: 'var(--color-brand)', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5, textDecoration: 'none', transition: 'all 0.2s', fontWeight: 'bold' }}>
-                            <Download size={13} /> PDF
-                          </a>
                           <button onClick={() => handleRegenerate(r.session_id, r.candidate_name, r.sap_id, videoUrl)} disabled={regeneratingId === r.session_id} style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-secondary)', cursor: regeneratingId === r.session_id ? 'not-allowed' : 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s' }} title="Regenerate Report">
                             {regeneratingId === r.session_id ? <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={13} />}
                           </button>

@@ -738,17 +738,14 @@ export default function CandidatesPage() {
                         </div>
                       </div>
 
-                      {/* PDF Action buttons */}
+                      {/* Detailed Report action button */}
                       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 }}>
                         <button
-                          onClick={() => window.open(selectedFile.data.presign_url, '_blank')}
-                          style={{ background: 'rgba(79,70,229,0.08)', border: '1px solid rgba(79,70,229,0.15)', borderRadius: 8, padding: '8px 16px', color: 'var(--color-brand)', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, fontWeight: 'bold' }}
+                          onClick={() => router.push(`/hr/reports/${selectedFile.data.session_id}?name=${encodeURIComponent(selectedFile.candidate.candidate_name)}&sap=${selectedFile.candidate.sap_id || ''}&pdf=${encodeURIComponent(selectedFile.data.presign_url || '')}&video=${encodeURIComponent(selectedFile.candidate.latest_video_url || '')}`)}
+                          style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', border: 'none', borderRadius: 8, padding: '9px 18px', color: '#ffffff', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, boxShadow: '0 4px 14px rgba(99,102,241,0.35)' }}
                         >
-                          <ExternalLink size={13} /> View PDF
+                          <FileText size={14} /> Open Detailed Report
                         </button>
-                        <a href={selectedFile.data.presign_url} download style={{ background: 'var(--gradient-brand)', border: 'none', borderRadius: 8, padding: '8px 14px', color: '#ffffff', cursor: 'pointer', fontSize: 12, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 5, fontWeight: 'bold', boxShadow: '0 4px 0 #3b1bb6, 0 4px 10px rgba(79,70,229,0.2)' }}>
-                          <Download size={13} /> Download PDF
-                        </a>
                       </div>
                     </div>
                   )}
