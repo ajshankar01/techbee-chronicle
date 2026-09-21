@@ -995,11 +995,11 @@ function CognitiveSegment({
       </div>
 
       {/* Main Question & Answer Container */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col min-h-0">
         {q ? (
-          <div className="flex flex-col flex-1">
-            {/* Sticky Question Header: Always visible so candidate never loses sight of question */}
-            <div className="sticky top-[88px] z-10 bg-slate-50/95 backdrop-blur-sm border-b border-slate-200 p-5 sm:p-6 shadow-xs">
+          <div className="flex flex-col flex-1 min-h-0">
+            {/* Question Header: Compact, clean, and nicely separated */}
+            <div className="bg-slate-50/95 border-b border-slate-200 p-5 sm:p-6 shrink-0">
               <div className="max-w-3xl mx-auto space-y-2.5">
                 <span className="inline-block px-3 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold rounded-full uppercase tracking-wider">
                   Question {currentQIdx + 1} of {questions.length}
@@ -1010,8 +1010,8 @@ function CognitiveSegment({
               </div>
             </div>
 
-            {/* Scrollable Answer Options Area */}
-            <div className="p-5 sm:p-8 flex-1 overflow-y-auto max-h-[calc(100vh-320px)]">
+            {/* Scrollable Answer Options Area: Scroll up and down like in Segment 4 */}
+            <div className="p-5 sm:p-8 flex-1 overflow-y-auto max-h-[calc(100vh-280px)] custom-scrollbar">
               <div className="max-w-3xl mx-auto space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {q.options?.map((opt: any, optIdx: number) => {
