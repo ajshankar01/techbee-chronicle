@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -172,7 +172,7 @@ export default function HRKnowledgeAssistantPage() {
             { label: "Reports",   href: "/hr/reports",   active: false, icon: <FileText size={16} /> },
             { label: "Recordings",href: "/hr/recordings",active: false, icon: <Clapperboard size={16} /> },
             { label: "Questions", href: "/hr/questions", active: false, icon: <HelpCircle size={16} /> },
-            { label: "Knowledge Base (RAG)", href: "/hr/knowledge", active: true, icon: <BookOpen size={16} /> },
+            { label: "Knowledge Base", href: "/hr/knowledge", active: true, icon: <BookOpen size={16} /> },
           ].map(({ label, href, active, icon }) => (
             <button
               key={label}
@@ -234,7 +234,7 @@ export default function HRKnowledgeAssistantPage() {
                 Enterprise Knowledge &amp; Evaluation Assistant
               </h1>
               <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>
-                Production-Grade 7-Layer RAG System (Grounded in HCL TechBee 2026 Guidelines)
+                Grounded in HCL TechBee 2026 Guidelines
               </p>
             </div>
           </div>

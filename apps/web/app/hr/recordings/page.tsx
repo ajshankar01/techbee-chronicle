@@ -284,7 +284,7 @@ export default function VideosPage() {
             { label: 'Reports',   href: '/hr/reports',   active: false, icon: <FileText size={16} /> },
             { label: 'Recordings',    href: '/hr/recordings', active: true,  icon: <Clapperboard size={16} /> },
             { label: 'Questions', href: '/hr/questions', active: false, icon: <HelpCircle size={16} /> },
-            { label: 'Knowledge Base (RAG)', href: '/hr/knowledge', active: false, icon: <BookOpen size={16} /> },
+            { label: 'Knowledge Base', href: '/hr/knowledge', active: false, icon: <BookOpen size={16} /> },
           ].map(({ label, href, active, icon }) => (
             <button key={label} onClick={() => router.push(href)} style={{
               display: 'flex',

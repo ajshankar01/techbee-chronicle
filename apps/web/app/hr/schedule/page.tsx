@@ -92,7 +92,7 @@ const NAV = [
   { label: 'Reports',   href: '/hr/reports',   icon: <FileText size={16} /> },
   { label: 'Recordings',    href: '/hr/recordings',    icon: <Clapperboard size={16} /> },
   { label: 'Questions', href: '/hr/questions', icon: <HelpCircle size={16} /> },
-  { label: 'Knowledge Base (RAG)', href: '/hr/knowledge', icon: <BookOpen size={16} /> },
+  { label: 'Knowledge Base', href: '/hr/knowledge', icon: <BookOpen size={16} /> },
 ];
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────

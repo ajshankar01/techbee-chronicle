@@ -325,7 +325,7 @@ export default function QuestionsPage() {
             { label: 'Reports',   href: '/hr/reports',   active: false, icon: <FileText size={16} /> },
             { label: 'Recordings',    href: '/hr/recordings',    active: false, icon: <Clapperboard size={16} /> },
             { label: 'Questions', href: '/hr/questions', active: true,  icon: <HelpCircle size={16} /> },
-            { label: 'Knowledge Base (RAG)', href: '/hr/knowledge', active: false, icon: <BookOpen size={16} /> },
+            { label: 'Knowledge Base', href: '/hr/knowledge', active: false, icon: <BookOpen size={16} /> },
           ].map(({ label, href, active, icon }) => (
             <button key={label} onClick={() => router.push(href)} style={{
               display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 16px', borderRadius: 10, fontSize: 13,
