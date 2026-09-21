@@ -197,6 +197,30 @@ def generate_html_email(
 </html>"""
 
 
+def _send_via_aws_ses(
+    msg: MIMEMultipart,
+    candidate_email: str,
+) -> bool:
+    """Send email via AWS SES over HTTPS (Port 443) — never blocked by firewalls."""
+    try:
+        import boto3
+        ses = boto3.client(
+            "ses",
+            region_name=settings.AWS_REGION or "ap-southeast-2",
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        )
+        ses.send_raw_email(
+            Source=settings.SMTP_FROM,
+            Destinations=[candidate_email],
+            RawMessage={"Data": msg.as_string()},
+        )
+        return True
+    except Exception as e:
+        logger.warning(f"AWS SES send failed for {candidate_email}: {e}")
+        return False
+
+
 def send_batch_invitations(
     sessions: List[Dict],
     batch_name: str,
@@ -209,24 +233,77 @@ def send_batch_invitations(
     Background / thread-pool task: send email invitations to all candidates in a batch.
     Each email includes a personal .ics calendar file.
 
-    Tries port 465 (SMTPS / SSL) first, then falls back to port 587 (STARTTLS)
-    to guarantee delivery regardless of cloud host network restrictions.
+    1. Tries AWS SES (HTTPS Port 443 via REST) first — 100% reliable across cloud hosts (Render, AWS, etc.).
+    2. Falls back to direct SMTP (Port 465 SSL, then Port 587 STARTTLS) if SES is unconfigured.
     """
-    if not settings.smtp_configured:
-        logger.warning(
-            "📧 SMTP not configured — invitations NOT sent. "
-            "Set SMTP_ENABLED=True and credentials in .env to enable."
-        )
-        for s in sessions:
-            interview_url = f"{APP_URL}/interview?token={s.get('access_token', '')}&session={s.get('session_id', '')}"
-            logger.info(f"[DEV]  → {s.get('candidate_name')} <{s.get('candidate_email')}> | {interview_url}")
-        return
-
-    import smtplib
     sent_count = 0
     failed_count = 0
 
-    # Establish SMTP connection: Try 465 (SSL) first, fallback to 587 (STARTTLS)
+    has_aws_credentials = bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
+
+    # If AWS credentials exist, send directly via AWS SES (over HTTPS Port 443, never firewall-blocked)
+    if has_aws_credentials:
+        logger.info(f"🚀 Dispatching {len(sessions)} invitation emails via AWS SES (HTTPS Port 443)...")
+        for session in sessions:
+            try:
+                candidate_email = session["candidate_email"]
+                candidate_name = session["candidate_name"]
+                access_token = session.get("access_token", "")
+                session_id = session["session_id"]
+                interview_url = f"{APP_URL}/interview?token={access_token}&session={session_id}"
+
+                msg = MIMEMultipart("mixed")
+                msg["From"] = settings.SMTP_FROM
+                msg["To"] = candidate_email
+                msg["Subject"] = f"Your TechBee Chronicle Interview — {batch_name}"
+                msg["Reply-To"] = settings.SMTP_USER
+
+                html_body = generate_html_email(
+                    candidate_name=candidate_name,
+                    batch_name=batch_name,
+                    scheduled_dt=scheduled_dt,
+                    expires_at=expires_at,
+                    interview_url=interview_url,
+                    module_level=module_level,
+                )
+                msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+                ics_data = generate_ics(
+                    batch_name=batch_name,
+                    scheduled_dt=scheduled_dt,
+                    expires_at=expires_at,
+                    candidate_name=candidate_name,
+                    candidate_email=candidate_email,
+                    interview_url=interview_url,
+                )
+                ics_part = MIMEBase("text", "calendar", method="REQUEST", name="interview.ics")
+                ics_part.set_payload(ics_data)
+                encoders.encode_base64(ics_part)
+                ics_part.add_header("Content-Disposition", "attachment", filename="interview.ics")
+                msg.attach(ics_part)
+
+                ok = _send_via_aws_ses(msg, candidate_email)
+                if ok:
+                    sent_count += 1
+                    logger.info(f"✅ Email sent via AWS SES → {candidate_email} (batch {batch_id})")
+                else:
+                    failed_count += 1
+            except Exception as e:
+                failed_count += 1
+                logger.error(f"❌ Failed to process SES email for {session.get('candidate_email', '?')}: {e}")
+
+        logger.info(f"Batch {batch_id} (SES): {sent_count} sent, {failed_count} failed")
+        if sent_count > 0:
+            return {"sent": sent_count, "failed": failed_count, "provider": "aws_ses", "error": None}
+
+    # Fallback to SMTP (works in local development or if AWS SES is not configured)
+    if not settings.smtp_configured:
+        logger.warning(
+            "📧 SMTP not configured and SES unavailable — invitations NOT sent."
+        )
+        return {"sent": 0, "failed": len(sessions), "error": "No email provider available"}
+
+    import smtplib
     smtp = None
     ports_to_try = [settings.SMTP_PORT]
     if settings.SMTP_PORT == 465:
@@ -239,9 +316,9 @@ def send_batch_invitations(
         try:
             logger.info(f"Connecting to SMTP server {settings.SMTP_HOST}:{port}...")
             if port == 465:
-                smtp = smtplib.SMTP_SSL(settings.SMTP_HOST, 465, timeout=12)
+                smtp = smtplib.SMTP_SSL(settings.SMTP_HOST, 465, timeout=10)
             else:
-                smtp = smtplib.SMTP(settings.SMTP_HOST, port, timeout=12)
+                smtp = smtplib.SMTP(settings.SMTP_HOST, port, timeout=10)
                 smtp.ehlo()
                 smtp.starttls()
             smtp.login(settings.SMTP_USER, settings.SMTP_PASS)
@@ -269,17 +346,14 @@ def send_batch_invitations(
                 candidate_name = session["candidate_name"]
                 access_token = session.get("access_token", "")
                 session_id = session["session_id"]
-
                 interview_url = f"{APP_URL}/interview?token={access_token}&session={session_id}"
 
-                # Build email
                 msg = MIMEMultipart("mixed")
                 msg["From"] = settings.SMTP_FROM
                 msg["To"] = candidate_email
                 msg["Subject"] = f"Your TechBee Chronicle Interview — {batch_name}"
                 msg["Reply-To"] = settings.SMTP_USER
 
-                # HTML body
                 html_body = generate_html_email(
                     candidate_name=candidate_name,
                     batch_name=batch_name,
@@ -290,7 +364,6 @@ def send_batch_invitations(
                 )
                 msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-                # .ics calendar attachment
                 ics_data = generate_ics(
                     batch_name=batch_name,
                     scheduled_dt=scheduled_dt,
@@ -309,8 +382,6 @@ def send_batch_invitations(
                 sent_count += 1
                 logger.info(f"✅ Email sent → {candidate_email} (batch {batch_id})")
 
-                # Session note email_sent_at is stamped by the calling batch endpoint
-
             except Exception as e:
                 failed_count += 1
                 logger.error(f"❌ Failed to send to {session.get('candidate_email', '?')}: {e}")
@@ -321,6 +392,6 @@ def send_batch_invitations(
         except Exception:
             pass
 
-    logger.info(f"Batch {batch_id}: {sent_count} sent, {failed_count} failed")
-    return {"sent": sent_count, "failed": failed_count, "error": None}
+    logger.info(f"Batch {batch_id} (SMTP): {sent_count} sent, {failed_count} failed")
+    return {"sent": sent_count, "failed": failed_count, "provider": "smtp", "error": None}
 
