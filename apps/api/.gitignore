@@ -1,0 +1,42 @@
+# API gitignore
+.env
+.env.*
+!.env.example
+!.env.sample-smtp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+
+# SQLite databases (contain PII — never commit)
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated caches (server-local; lost on redeploy anyway)
+video_cache/
+pdf_cache/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Scratch / one-off scripts
+scratch/
+
+# Secrets
+service-account.json
+*.pem
+*.key
+
+# Distribution
+dist/
+build/
+*.egg-info/

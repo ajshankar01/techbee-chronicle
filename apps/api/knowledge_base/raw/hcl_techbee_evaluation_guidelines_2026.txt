@@ -1,0 +1,65 @@
+﻿# HCL TECHBEE INTERVIEW EVALUATION POLICY & CANDIDATE BENCHMARKS (2026)
+Document ID: HCL-TB-RUBRIC-2026-V1
+Classification: Confidential - HR & Evaluator Guidance
+
+---
+
+## SECTION 1: PROGRAM MISSION & CANDIDATE PROFILE
+HCL TechBee is an early-career work-integrated learning program designed for 12th-standard high school graduates.
+Evaluators must measure candidate potential based on curiosity, communication clarity, problem-solving, and adaptability.
+Since candidates are 17-19 years old, evaluation must reward structured thought and logical coherence over advanced corporate jargon.
+
+---
+
+## SECTION 2: SEGMENT 1 - ORAL COMMUNICATION & SELF-INTRODUCTION
+### 2.1 Cadence and Fluency Standards
+- Optimal Speaking Rate: 110 to 140 words per minute (WPM).
+- Below 90 WPM: Marked as hesitant; deduct 10 points in communication cadence.
+- Above 160 WPM: Marked as rushed/nervous; deduct 5 points in articulation.
+- Filler Word Tolerance: Up to 3 filler words (e.g., 'um', 'like', 'uh', 'you know') is acceptable. More than 6 filler words results in a 15-point deduction in fluency.
+
+### 2.2 Core Content Requirements
+The candidate's introduction must cover three specific areas:
+1. Academic background and journey so far.
+2. Core technology passions (e.g., Python, Web development, AI, Cloud, Cyber Security).
+3. Motivation for joining HCL TechBee rather than conventional college programs.
+
+---
+
+## SECTION 3: SEGMENT 2 - COGNITIVE & LOGICAL ABILITY
+### 3.1 Scoring Benchmarks
+- Maximum Score: 100 points across 10 questions (10 points per question).
+- Domain Breakdown:
+  - Numerical Reasoning: 3 questions (Target: minimum 2 correct).
+  - Logical Deduction: 4 questions (Target: minimum 3 correct).
+  - Pattern Recognition: 3 questions (Target: minimum 2 correct).
+- Overall Cutoff for Freshers: Minimum 60% total cognitive score. Candidates scoring 80%+ qualify for High-Performer fast-track streaming.
+
+---
+
+## SECTION 4: SEGMENT 3 - PSYCHOMETRIC & WORKPLACE CULTURE FIT
+### 4.1 Scoring Structure & Reverse-Scoring
+- Total Questions: 15 questions evaluated on a 1-5 Likert scale (Strongly Disagree=1 to Strongly Agree=5).
+- Reverse-Scoring Guardrail: Exactly 7 questions are phrased negatively. For these 7 questions, positive alignment is scored in reverse: Score = (6 - candidate_selection).
+- Critical Competencies:
+  1. Adaptability to shift timings and corporate discipline.
+  2. Team collaboration and receptive attitude toward constructive feedback.
+  3. Resilience under high academic and project workloads.
+- Red Flags: A score below 2.5 on resilience or coachability requires secondary HR review before offering a TechBee bond contract.
+
+---
+
+## SECTION 5: SEGMENT 4 - PROFESSIONAL EMAIL WRITING
+### 5.1 Rubric and Deduction Rules
+- Minimum Word Count: 50 words; Maximum Word Count: 180 words.
+- Mandatory Salutation: Must open with professional salutation (e.g., 'Dear Hiring Manager', 'Hello Team', 'Respected Sir/Madam'). Missing salutation = 15-point penalty.
+- Professional Sign-off: Must conclude with formal closing (e.g., 'Warm regards', 'Sincerely', 'Best regards', followed by candidate name). Missing sign-off = 10-point penalty.
+- Subject Line: Must be concise and relevant to the interview prompt.
+- Tone: Must be courteous, solution-oriented, and free of SMS abbreviations (e.g., 'u', 'plz', 'thx'). Any informal SMS abbreviations incur an automatic 20-point deduction.
+
+---
+
+## SECTION 6: PROCTORING & INTEGRITY THRESHOLDS
+- Maximum Allowed Tab Switches: 2 (Third tab switch flags the session for supervisory audit).
+- Face Visibility: Candidate face must remain in frame for at least 85% of total session duration.
+- Copy-Paste Detection: Segment 4 (Email) prohibits clipboard paste. Detected paste events trigger immediate manual review.

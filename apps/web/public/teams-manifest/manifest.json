@@ -1,0 +1,54 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "<<REPLACE_WITH_YOUR_TEAMS_APP_ID>>",
+  "packageName": "com.techbee.ai-interview",
+  "developer": {
+    "name": "TechBee Program",
+    "websiteUrl": "https://your-domain.com",
+    "privacyUrl": "https://your-domain.com/privacy",
+    "termsOfUseUrl": "https://your-domain.com/terms"
+  },
+  "name": {
+    "short": "TechBee Interview",
+    "full": "TechBee AI Interview Platform"
+  },
+  "description": {
+    "short": "AI-powered interview with Aria",
+    "full": "Conduct AI-driven candidate interviews with Aria, your TechBee AI interviewer. Powered by advanced AI for psychometric analysis, communication assessment, and behavioral evaluation."
+  },
+  "icons": {
+    "color": "icon-color.png",
+    "outline": "icon-outline.png"
+  },
+  "accentColor": "#00d4aa",
+  "staticTabs": [
+    {
+      "entityId": "hr-dashboard",
+      "name": "HR Dashboard",
+      "contentUrl": "https://your-domain.com/hr/dashboard",
+      "websiteUrl": "https://your-domain.com/hr/dashboard",
+      "scopes": ["personal", "team"]
+    },
+    {
+      "entityId": "interview",
+      "name": "My Interview",
+      "contentUrl": "https://your-domain.com/interview",
+      "websiteUrl": "https://your-domain.com/interview",
+      "scopes": ["personal"]
+    }
+  ],
+  "permissions": [
+    "identity",
+    "messageTeamMembers"
+  ],
+  "validDomains": [
+    "your-domain.com",
+    "*.ngrok.io"
+  ],
+  "webApplicationInfo": {
+    "id": "<<REPLACE_WITH_YOUR_AZURE_CLIENT_ID>>",
+    "resource": "api://your-domain.com/<<REPLACE_WITH_YOUR_AZURE_CLIENT_ID>>"
+  }
+}

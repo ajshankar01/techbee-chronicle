@@ -1,0 +1,44 @@
+# Environment & secrets
+.env
+.env.*
+!.env.example
+service-account.json
+credentials.json
+
+# Dependencies
+node_modules/
+.venv/
+env/
+venv/
+__pycache__/
+*.pyc
+
+# Builds & caches
+.next/
+out/
+build/
+dist/
+video_cache/
+pdf_cache/
+*.db
+*.sqlite
+*.sqlite3
+
+# Test & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs & temp
+*.log
+scratch/
+.DS_Store
+Thumbs.db
+
+# Media & local dumps
+*.mp4
+*.jpg
+*.jpeg
+*.png
+*.pdf
+sample_candidates.csv
