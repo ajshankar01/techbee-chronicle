@@ -11,21 +11,23 @@ import {
   ShieldCheck, UserX, Settings, Trash2, Plus, BookOpen
 } from 'lucide-react';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+const API = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
 
-// Resilient fetch helper: tries direct API URL (IPv4), falls back to Next.js proxy rewrite
+// Resilient fetch helper: tries direct API URL, falls back to Next.js proxy rewrite
 async function fetchAPI(endpoint: string, init?: RequestInit): Promise<Response> {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   try {
-    const res = await fetch(`${API}${endpoint}`, init);
-    // If direct fetch succeeded (2xx-4xx), return response
-    if (res.status < 500) {
+    const res = await fetch(`${API}${cleanEndpoint}`, init);
+    if (res.ok || res.status < 500) {
       return res;
     }
-    // If backend direct fetch gave 500 or CORS error, try Next.js server-side proxy
-    return await fetch(endpoint, init);
+    return await fetch(cleanEndpoint, init);
   } catch (err) {
-    // If direct IPv4 port fetch was blocked, refused, or CORS failed, fallback to same-origin Next.js proxy
-    return await fetch(endpoint, init);
+    try {
+      return await fetch(cleanEndpoint, init);
+    } catch {
+      throw err;
+    }
   }
 }
 
@@ -341,7 +343,9 @@ export default function SchedulePage() {
       } else {
         setCreateError(data.detail?.error || data.detail || 'Failed to create batch.');
       }
-    } catch { setCreateError('Network error — is the API running?'); }
+    } catch (e: any) { 
+      setCreateError(`Connection issue: ${e.message || 'Check API connection'}`); 
+    }
     finally { setCreating(false); }
   };
 
