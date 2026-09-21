@@ -228,9 +228,14 @@ async def send_batch_invitations(
     failed_count = 0
 
     try:
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as smtp:
-            smtp.ehlo()
-            smtp.starttls()
+        if settings.SMTP_PORT == 465:
+            smtp_conn = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20)
+        else:
+            smtp_conn = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20)
+            smtp_conn.ehlo()
+            smtp_conn.starttls()
+
+        with smtp_conn as smtp:
             smtp.login(settings.SMTP_USER, settings.SMTP_PASS)
 
             for session in sessions:
