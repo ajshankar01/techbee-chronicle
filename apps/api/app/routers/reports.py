@@ -982,11 +982,47 @@ async def generate_and_upload_pdf(
         # Extract cognitive and psychometric scores from DB if available
         cog_metrics = {}
         psy_metrics = {}
+        raw_cog_list = []
+        raw_psy_list = []
         if session_uuid:
             try:
                 from app.models.models import SessionCognitiveQuestion, CognitiveQuestion, SessionPsychometricQuestion, PsychometricQuestion
                 anal_res_check = await db.execute(select(AnalysisResult).where(AnalysisResult.session_id == session_uuid))
                 existing_ar = anal_res_check.scalar_one_or_none()
+
+                sq_res = await db.execute(
+                    select(SessionCognitiveQuestion, CognitiveQuestion)
+                    .join(CognitiveQuestion, SessionCognitiveQuestion.cognitive_question_id == CognitiveQuestion.id)
+                    .where(SessionCognitiveQuestion.session_id == session_uuid)
+                    .order_by(SessionCognitiveQuestion.order_index)
+                )
+                sq_rows = sq_res.all()
+                for sq, cq in sq_rows:
+                    raw_cog_list.append({
+                        "question": cq.question_text,
+                        "domain": cq.domain.value if cq.domain else "",
+                        "options": cq.options or [],
+                        "selected_index": sq.selected_option_index,
+                        "correct_index": cq.correct_answer_index,
+                        "is_correct": sq.selected_option_index is not None and sq.selected_option_index == cq.correct_answer_index,
+                    })
+
+                raw_psy_list = []
+                spq_res = await db.execute(
+                    select(SessionPsychometricQuestion, PsychometricQuestion)
+                    .join(PsychometricQuestion, SessionPsychometricQuestion.psychometric_question_id == PsychometricQuestion.id)
+                    .where(SessionPsychometricQuestion.session_id == session_uuid)
+                    .order_by(SessionPsychometricQuestion.order_index)
+                )
+                spq_rows = spq_res.all()
+                for sq, pq in spq_rows:
+                    raw_psy_list.append({
+                        "statement": pq.statement_text,
+                        "trait": pq.trait,
+                        "ideal_response": pq.ideal_response or "SA",
+                        "selected_score": sq.selected_score if sq.selected_score is not None else 3,
+                    })
+
                 if existing_ar and existing_ar.gross_speed is not None:
                     cog_metrics = {
                         "Gross Speed": f"{round(existing_ar.gross_speed * 100, 1)}%",
@@ -997,12 +1033,6 @@ async def generate_and_upload_pdf(
                         "Composite": f"{round(existing_ar.cognitive_composite_score, 1)}%",
                     }
                 else:
-                    sq_res = await db.execute(
-                        select(SessionCognitiveQuestion, CognitiveQuestion)
-                        .join(CognitiveQuestion, SessionCognitiveQuestion.cognitive_question_id == CognitiveQuestion.id)
-                        .where(SessionCognitiveQuestion.session_id == session_uuid)
-                    )
-                    sq_rows = sq_res.all()
                     if sq_rows:
                         total_c = len(sq_rows)
                         attempted_c = sum(1 for sq, cq in sq_rows if sq.selected_option_index is not None)
@@ -1023,12 +1053,6 @@ async def generate_and_upload_pdf(
                             "Composite": f"{round(comp, 1)}%",
                         }
 
-                spq_res = await db.execute(
-                    select(SessionPsychometricQuestion, PsychometricQuestion)
-                    .join(PsychometricQuestion, SessionPsychometricQuestion.psychometric_question_id == PsychometricQuestion.id)
-                    .where(SessionPsychometricQuestion.session_id == session_uuid)
-                )
-                spq_rows = spq_res.all()
                 if spq_rows:
                     trait_scores: dict = {}
                     for sq, pq in spq_rows:
@@ -1109,6 +1133,8 @@ async def generate_and_upload_pdf(
                 "profile_snapshot": analysis.get("profile_snapshot", {}) if 'analysis' in locals() and analysis else {},
             },
             "transcript": pdf_transcript,
+            "cognitive_results": raw_cog_list if 'raw_cog_list' in locals() else [],
+            "psychometric_results": raw_psy_list if 'raw_psy_list' in locals() else [],
         }
 
         pdf_bytes = await generate_interview_pdf(report_data, template_id)

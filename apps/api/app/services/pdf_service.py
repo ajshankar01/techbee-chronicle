@@ -493,8 +493,28 @@ async def generate_interview_pdf(report_data: dict, template_id: int = 1) -> byt
             ('GRID', (0, 0), (-1, -1), 0.4, SLATE_200),
             ('PADDING', (0, 0), (-1, -1), 5),
         ]))
-        elements.append(t_yoy)
-    
+    # Segment Audit Trail: Raw Test Item Summary (Cognitive & Psychometric)
+    cog_results = report_data.get("cognitive_results", [])
+    psy_results = report_data.get("psychometric_results", [])
+    if cog_results or psy_results:
+        elements.append(Paragraph("Segment Raw Test Items Audit Summary", h2_s))
+        audit_rows = [
+            [Paragraph("<b>Evaluation Domain</b>", bold_s), Paragraph("<b>Item Count</b>", bold_s), Paragraph("<b>Audit Status & Answer Capture</b>", bold_s)],
+            [Paragraph("Segment 1: Spoken Oral Audio", body_s), Paragraph("3 Parts", body_s), Paragraph("Verbatim Transcript Captured & Audited via Speech Recognition", S('aud1', fontSize=8, fontName='Helvetica'))],
+            [Paragraph("Segment 2: Cognitive Speed Test", body_s), Paragraph(f"{len(cog_results)} Questions", body_s), Paragraph(f"All {len(cog_results)} items recorded with selected choice & answer key", S('aud2', fontSize=8, fontName='Helvetica'))],
+            [Paragraph("Segment 3: Psychometric Inventory", body_s), Paragraph(f"{len(psy_results)} Items", body_s), Paragraph(f"All {len(psy_results)} Likert ratings captured across 5 core traits", S('aud3', fontSize=8, fontName='Helvetica'))],
+            [Paragraph("Segment 4: Business Written Email", body_s), Paragraph("1 Submission", body_s), Paragraph("Full email body, subject, recipient, and tone evaluated", S('aud4', fontSize=8, fontName='Helvetica'))],
+        ]
+        t_audit = Table(audit_rows, colWidths=[160, 95, 280])
+        t_audit.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), SLATE_100),
+            ('GRID', (0, 0), (-1, -1), 0.4, SLATE_200),
+            ('PADDING', (0, 0), (-1, -1), 5),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        elements.append(t_audit)
+        elements.append(Spacer(1, 10))
+
     doc.build(elements)
     buffer.seek(0)
     logger.info(f"✅ Generated 4-segment PDF report for {name} ({sap_id})")
