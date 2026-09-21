@@ -11,8 +11,8 @@ class Settings(BaseSettings):
     APP_NAME: str = "Techbee Chronicle AI Interview Platform"
     APP_VERSION: str = "1.0.0"
     SECRET_KEY: str = "change-me-in-production"
-    API_BASE_URL: str = "http://localhost:8000"
-    FRONTEND_URL: str = "http://localhost:3000"
+    API_BASE_URL: str = "https://techbee-api.onrender.com"
+    FRONTEND_URL: str = "https://techbee-chronicle-web.vercel.app"
 
     @property
     def ALLOWED_ORIGINS(self) -> List[str]:
@@ -84,13 +84,12 @@ class Settings(BaseSettings):
     GOOGLE_TTS_LANGUAGE_CODE: str = "en-IN"
 
     # ── Email / SMTP (Interview Invitations) ──────────────────────────────
-    # Configured by HR admin once techbeechronical@hcltech.com is provisioned
-    SMTP_HOST: str = "smtp.office365.com"       # For HCL Outlook / Office 365
-    SMTP_PORT: int = 587                         # TLS port (STARTTLS)
-    SMTP_USER: str = ""                          # e.g. techbeechronical@hcltech.com
-    SMTP_PASS: str = ""                          # App password (not account password)
-    SMTP_FROM: str = "TechBee Chronicle HR <techbeechronical@hcltech.com>"
-    SMTP_ENABLED: bool = False                   # Set True once credentials are ready
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = "ajshankar01@gmail.com"
+    SMTP_PASS: str = "clwepuclwlbpfzos"
+    SMTP_FROM: str = "TechBee Chronicle HR <ajshankar01@gmail.com>"
+    SMTP_ENABLED: bool = True
 
     @property
     def smtp_configured(self) -> bool:
