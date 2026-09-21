@@ -409,6 +409,42 @@ async def list_batches(db: AsyncSession = Depends(get_db)):
     return {"batches": list(batches.values())}
 
 
+@router.get("/batches/diagnostic/test-smtp")
+async def test_smtp_diagnostic():
+    """Diagnostic endpoint to test SMTP directly from the cloud environment."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    results = {}
+    for port in [465, 587]:
+        try:
+            if port == 465:
+                server = smtplib.SMTP_SSL(settings.SMTP_HOST, 465, timeout=10)
+            else:
+                server = smtplib.SMTP(settings.SMTP_HOST, port, timeout=10)
+                server.ehlo()
+                server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASS)
+            msg = MIMEMultipart()
+            msg["From"] = settings.SMTP_FROM
+            msg["To"] = settings.SMTP_USER
+            msg["Subject"] = f"Diagnostic Test from Render Port {port}"
+            msg.attach(MIMEText(f"SMTP diagnostic test on port {port} succeeded.", "plain"))
+            server.sendmail(settings.SMTP_USER, [settings.SMTP_USER], msg.as_string())
+            server.quit()
+            results[f"port_{port}"] = "SUCCESS"
+        except Exception as e:
+            results[f"port_{port}"] = f"FAILED: {str(e)}"
+
+    return {
+        "smtp_host": settings.SMTP_HOST,
+        "smtp_user": settings.SMTP_USER,
+        "smtp_enabled": settings.SMTP_ENABLED,
+        "results": results
+    }
+
+
 # ── GET /api/hr/batches/{batch_id} — Batch detail ─────────────────────────────
 
 @router.get("/batches/{batch_id}")
@@ -627,40 +663,7 @@ async def dispatch_batch_invitations(
     }
 
 
-@router.get("/batches/test-smtp")
-async def test_smtp_diagnostic():
-    """Diagnostic endpoint to test SMTP directly from the cloud environment."""
-    import smtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
 
-    results = {}
-    for port in [465, 587]:
-        try:
-            if port == 465:
-                server = smtplib.SMTP_SSL(settings.SMTP_HOST, 465, timeout=10)
-            else:
-                server = smtplib.SMTP(settings.SMTP_HOST, port, timeout=10)
-                server.ehlo()
-                server.starttls()
-            server.login(settings.SMTP_USER, settings.SMTP_PASS)
-            msg = MIMEMultipart()
-            msg["From"] = settings.SMTP_FROM
-            msg["To"] = settings.SMTP_USER
-            msg["Subject"] = f"Diagnostic Test from Render Port {port}"
-            msg.attach(MIMEText(f"SMTP diagnostic test on port {port} succeeded.", "plain"))
-            server.sendmail(settings.SMTP_USER, [settings.SMTP_USER], msg.as_string())
-            server.quit()
-            results[f"port_{port}"] = "SUCCESS"
-        except Exception as e:
-            results[f"port_{port}"] = f"FAILED: {str(e)}"
-
-    return {
-        "smtp_host": settings.SMTP_HOST,
-        "smtp_user": settings.SMTP_USER,
-        "smtp_enabled": settings.SMTP_ENABLED,
-        "results": results
-    }
 
 
 # ── POST /api/hr/batches/register-and-resolve — Auto-register and resolve ──
