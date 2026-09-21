@@ -335,7 +335,13 @@ export default function SchedulePage() {
           })),
         }),
       });
-      const data = await res.json();
+      let data: any = {};
+      const text = await res.text();
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { detail: text || `Server returned status ${res.status}` };
+      }
       if (res.ok) {
         setCreatedBatch({ batch_id: data.batch_id, total: data.total_scheduled, unresolved: data.unresolved || [] });
         loadBatches();

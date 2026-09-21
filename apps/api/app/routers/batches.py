@@ -202,7 +202,8 @@ async def create_batch(
         access_token = secrets.token_urlsafe(32)
 
         # Find if this candidate had an override in the request
-        override_req = next((c for c in req.candidates if c.identifier.lower() == candidate.email.lower() or c.identifier.upper() == candidate.sap_id), None)
+        cand_sap = (candidate.employee_id or '').upper()
+        override_req = next((c for c in req.candidates if c.identifier.lower() == candidate.email.lower() or (cand_sap and c.identifier.upper() == cand_sap)), None)
         
         # Module level: use per-candidate bond year if HR chose 'Auto',
         # otherwise use the HR-specified override for all candidates in this batch,

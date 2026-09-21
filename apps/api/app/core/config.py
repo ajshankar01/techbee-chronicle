@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     def ALLOWED_ORIGINS(self) -> List[str]:
         return [
             self.FRONTEND_URL,        # http://localhost:3000 (Next.js)
+            "https://techbee-chronicle-web.vercel.app",
             "http://localhost:3000",
             "http://localhost:3001",
             "http://localhost:8000",   # FastAPI itself (for same-origin PDF serve)
