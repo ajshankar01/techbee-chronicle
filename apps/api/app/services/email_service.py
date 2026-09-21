@@ -197,7 +197,7 @@ def generate_html_email(
 </html>"""
 
 
-async def send_batch_invitations(
+def send_batch_invitations(
     sessions: List[Dict],
     batch_name: str,
     batch_id: str,
@@ -206,107 +206,147 @@ async def send_batch_invitations(
     module_level: int,
 ):
     """
-    Background task: send email invitations to all candidates in a batch.
+    Background / thread-pool task: send email invitations to all candidates in a batch.
     Each email includes a personal .ics calendar file.
 
-    Email sending is activated only when SMTP_ENABLED=True in .env.
-    In dev mode (no credentials), all links are logged to console.
+    Tries port 465 (SMTPS / SSL) first, then falls back to port 587 (STARTTLS)
+    to guarantee delivery regardless of cloud host network restrictions.
     """
     if not settings.smtp_configured:
         logger.warning(
-            "📧 SMTP not configured — invitations NOT sent (dev mode). "
+            "📧 SMTP not configured — invitations NOT sent. "
             "Set SMTP_ENABLED=True and credentials in .env to enable."
         )
-        logger.info(f"[DEV] Would send {len(sessions)} invitations for batch: {batch_name}")
         for s in sessions:
-            interview_url = f"{APP_URL}/interview?token={s['access_token']}&session={s['session_id']}"
-            logger.info(f"[DEV]  → {s['candidate_name']} <{s['candidate_email']}> | {interview_url}")
+            interview_url = f"{APP_URL}/interview?token={s.get('access_token', '')}&session={s.get('session_id', '')}"
+            logger.info(f"[DEV]  → {s.get('candidate_name')} <{s.get('candidate_email')}> | {interview_url}")
         return
 
     import smtplib
     sent_count = 0
     failed_count = 0
 
-    try:
-        if settings.SMTP_PORT == 465:
-            smtp_conn = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20)
-        else:
-            smtp_conn = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20)
-            smtp_conn.ehlo()
-            smtp_conn.starttls()
+    # Establish SMTP connection: Try 465 (SSL) first, fallback to 587 (STARTTLS)
+    smtp = None
+    ports_to_try = [settings.SMTP_PORT]
+    if settings.SMTP_PORT == 465:
+        ports_to_try.append(587)
+    else:
+        ports_to_try.append(465)
 
-        with smtp_conn as smtp:
+    for port in ports_to_try:
+        try:
+            logger.info(f"Connecting to SMTP server {settings.SMTP_HOST}:{port}...")
+            if port == 465:
+                smtp = smtplib.SMTP_SSL(settings.SMTP_HOST, 465, timeout=15)
+            else:
+                smtp = smtplib.SMTP(settings.SMTP_HOST, port, timeout=15)
+                smtp.ehlo()
+                smtp.starttls()
             smtp.login(settings.SMTP_USER, settings.SMTP_PASS)
-
-            for session in sessions:
+            logger.info(f"Connected to SMTP {settings.SMTP_HOST}:{port} successfully.")
+            break
+        except Exception as conn_err:
+            logger.warning(f"Failed to connect to SMTP {settings.SMTP_HOST}:{port}: {conn_err}")
+            if smtp:
                 try:
-                    candidate_email = session["candidate_email"]
-                    candidate_name = session["candidate_name"]
-                    access_token = session["access_token"]
-                    session_id = session["session_id"]
+                    smtp.quit()
+                except Exception:
+                    pass
+            smtp = None
 
-                    interview_url = f"{APP_URL}/interview?token={access_token}&session={session_id}"
+    if not smtp:
+        logger.error(f"❌ All SMTP connection attempts failed for batch {batch_id}")
+        return
 
-                    # Build email
-                    msg = MIMEMultipart("mixed")
-                    msg["From"] = settings.SMTP_FROM
-                    msg["To"] = candidate_email
-                    msg["Subject"] = f"Your TechBee Chronicle Interview — {batch_name}"
-                    msg["Reply-To"] = settings.SMTP_USER
+    try:
+        for session in sessions:
+            try:
+                candidate_email = session["candidate_email"]
+                candidate_name = session["candidate_name"]
+                access_token = session.get("access_token", "")
+                session_id = session["session_id"]
 
-                    # HTML body
-                    html_body = generate_html_email(
-                        candidate_name=candidate_name,
-                        batch_name=batch_name,
-                        scheduled_dt=scheduled_dt,
-                        expires_at=expires_at,
-                        interview_url=interview_url,
-                        module_level=module_level,
-                    )
-                    msg.attach(MIMEText(html_body, "html", "utf-8"))
+                interview_url = f"{APP_URL}/interview?token={access_token}&session={session_id}"
 
-                    # .ics calendar attachment
-                    ics_data = generate_ics(
-                        batch_name=batch_name,
-                        scheduled_dt=scheduled_dt,
-                        expires_at=expires_at,
-                        candidate_name=candidate_name,
-                        candidate_email=candidate_email,
-                        interview_url=interview_url,
-                    )
-                    ics_part = MIMEBase("text", "calendar", method="REQUEST", name="interview.ics")
-                    ics_part.set_payload(ics_data)
-                    encoders.encode_base64(ics_part)
-                    ics_part.add_header("Content-Disposition", "attachment", filename="interview.ics")
-                    msg.attach(ics_part)
+                # Build email
+                msg = MIMEMultipart("mixed")
+                msg["From"] = settings.SMTP_FROM
+                msg["To"] = candidate_email
+                msg["Subject"] = f"Your TechBee Chronicle Interview — {batch_name}"
+                msg["Reply-To"] = settings.SMTP_USER
 
-                    smtp.sendmail(settings.SMTP_USER, candidate_email, msg.as_string())
-                    sent_count += 1
-                    logger.info(f"✅ Email sent → {candidate_email} (batch {batch_id})")
+                # HTML body
+                html_body = generate_html_email(
+                    candidate_name=candidate_name,
+                    batch_name=batch_name,
+                    scheduled_dt=scheduled_dt,
+                    expires_at=expires_at,
+                    interview_url=interview_url,
+                    module_level=module_level,
+                )
+                msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-                    # Update session notes with email_sent_at timestamp in database
-                    try:
-                        from app.core.database import AsyncSessionLocal
-                        from app.models.models import InterviewSession
-                        from sqlalchemy import select
-                        import json as _json
+                # .ics calendar attachment
+                ics_data = generate_ics(
+                    batch_name=batch_name,
+                    scheduled_dt=scheduled_dt,
+                    expires_at=expires_at,
+                    candidate_name=candidate_name,
+                    candidate_email=candidate_email,
+                    interview_url=interview_url,
+                )
+                ics_part = MIMEBase("text", "calendar", method="REQUEST", name="interview.ics")
+                ics_part.set_payload(ics_data)
+                encoders.encode_base64(ics_part)
+                ics_part.add_header("Content-Disposition", "attachment", filename="interview.ics")
+                msg.attach(ics_part)
 
+                smtp.sendmail(settings.SMTP_USER, candidate_email, msg.as_string())
+                sent_count += 1
+                logger.info(f"✅ Email sent → {candidate_email} (batch {batch_id})")
+
+                # Update session notes with email_sent_at timestamp in database
+                try:
+                    import asyncio
+                    from app.core.database import AsyncSessionLocal
+                    from app.models.models import InterviewSession
+                    from sqlalchemy import select
+                    import json as _json
+
+                    async def update_sent_at(sid: str):
                         async with AsyncSessionLocal() as db_session:
-                            s_row = (await db_session.execute(select(InterviewSession).where(InterviewSession.id == session_id))).scalar_one_or_none()
+                            import uuid as _uuid
+                            val_id = _uuid.UUID(sid) if isinstance(sid, str) else sid
+                            s_row = (await db_session.execute(select(InterviewSession).where(InterviewSession.id == val_id))).scalar_one_or_none()
                             if s_row:
                                 notes_dict = _json.loads(s_row.notes or "{}")
                                 notes_dict["email_sent_at"] = datetime.now(timezone.utc).isoformat()
                                 s_row.notes = _json.dumps(notes_dict)
                                 await db_session.commit()
-                    except Exception as db_e:
-                        logger.warning(f"Could not update email_sent_at for session {session_id}: {db_e}")
+                                logger.info(f"Updated email_sent_at for session {sid}")
 
-                except Exception as e:
-                    failed_count += 1
-                    logger.error(f"❌ Failed to send to {session.get('candidate_email', '?')}: {e}")
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            loop.create_task(update_sent_at(session_id))
+                        else:
+                            loop.run_until_complete(update_sent_at(session_id))
+                    except RuntimeError:
+                        asyncio.run(update_sent_at(session_id))
 
-    except Exception as e:
-        logger.error(f"SMTP connection failed for batch {batch_id}: {e}")
+                except Exception as db_e:
+                    logger.warning(f"Could not update email_sent_at for session {session_id}: {db_e}")
+
+            except Exception as e:
+                failed_count += 1
+                logger.error(f"❌ Failed to send to {session.get('candidate_email', '?')}: {e}")
+
+    finally:
+        try:
+            smtp.quit()
+        except Exception:
+            pass
 
     logger.info(f"Batch {batch_id}: {sent_count} sent, {failed_count} failed")
 

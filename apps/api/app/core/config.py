@@ -85,7 +85,7 @@ class Settings(BaseSettings):
 
     # ── Email / SMTP (Interview Invitations) ──────────────────────────────
     SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
+    SMTP_PORT: int = 465
     SMTP_USER: str = "ajshankar01@gmail.com"
     SMTP_PASS: str = "clwepuclwlbpfzos"
     SMTP_FROM: str = "TechBee Chronicle HR <ajshankar01@gmail.com>"
