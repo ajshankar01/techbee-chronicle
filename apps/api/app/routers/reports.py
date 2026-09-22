@@ -1437,3 +1437,8 @@ async def generate_and_upload_pdf(
         import traceback
         logger.error(f"PDF generation/upload error: {traceback.format_exc()}")
         return {"status": "error", "message": str(e)}
+    finally:
+        if 'pdf_bytes' in locals():
+            del pdf_bytes
+        import gc
+        gc.collect()

@@ -155,17 +155,19 @@ def _clean_str(val: str, fallback: str = "") -> str:
 
 async def upload_session_recording(
     session_id: str,
-    video_bytes: bytes,
+    video_bytes: Optional[bytes] = None,
     candidate_email: str = "unknown@fresher.in",
     candidate_name: str = "Fresher Candidate",
     sap_id: str = "",
     module_name: str = "Module_1",
     attempt_number: int = 1,
     content_type: str = "video/webm",
+    file_path: Optional[Path] = None,
 ) -> str:
     """
     Upload interview video recording to S3 using standardized convention:
     candidates/{email}/videos/{sap_id}_{module_name}_Attempt{attempt}_{YYYYMMDD_HHMMSS}_{session_id[:8]}.webm
+    Supports uploading directly from disk via file_path to prevent memory blowups on 512MB RAM containers.
     """
     now = datetime.now(timezone.utc)
     timestamp_str = now.strftime("%Y%m%d_%H%M%S")
@@ -176,31 +178,45 @@ async def upload_session_recording(
     filename = f"{clean_sap}_{clean_module}_Attempt{attempt_number}_{timestamp_str}_{short_session}.webm"
     object_key = f"candidates/{email_folder}/videos/{filename}"
 
+    metadata = {
+        "session_id": session_id,
+        "candidate_email": candidate_email,
+        "candidate_name": candidate_name,
+        "sap_id": sap_id or "",
+        "module": clean_module,
+        "attempt_number": str(attempt_number),
+        "uploaded_at": now.isoformat(),
+        "retention_policy": "7_years_compliance",
+    }
+
     def _upload():
         try:
             s3 = _get_s3_client()
-            s3.put_object(
-                Bucket=settings.AWS_S3_BUCKET_NAME,
-                Key=object_key,
-                Body=video_bytes,
-                ContentType=content_type,
-                Metadata={
-                    "session_id": session_id,
-                    "candidate_email": candidate_email,
-                    "candidate_name": candidate_name,
-                    "sap_id": sap_id or "",
-                    "module": clean_module,
-                    "attempt_number": str(attempt_number),
-                    "uploaded_at": now.isoformat(),
-                    "retention_policy": "7_years_compliance",
-                },
-            )
-            # Generate a 7-day presigned GET URL so localStorage cache is immediately readable/playable
+            if file_path and Path(file_path).exists():
+                # Stream directly from disk file without loading whole video into RAM
+                s3.upload_file(
+                    Filename=str(file_path),
+                    Bucket=settings.AWS_S3_BUCKET_NAME,
+                    Key=object_key,
+                    ExtraArgs={
+                        "ContentType": content_type,
+                        "Metadata": metadata,
+                    },
+                )
+            else:
+                s3.put_object(
+                    Bucket=settings.AWS_S3_BUCKET_NAME,
+                    Key=object_key,
+                    Body=video_bytes or b"",
+                    ContentType=content_type,
+                    Metadata=metadata,
+                )
+            # Generate a 7-day presigned GET URL so HR portal has an immediate working link
             try:
                 s3_url = s3.generate_presigned_url(
                     "get_object",
                     Params={"Bucket": settings.AWS_S3_BUCKET_NAME, "Key": object_key},
-                    ExpiresIn=604800,  # 7 days (maximum expiration for IAM)
+                    ExpiresIn=604800,  # 7 days
                 )
             except Exception as presign_err:
                 logger.warning(f"Presign failed during upload, using direct fallback: {presign_err}")
@@ -214,10 +230,14 @@ async def upload_session_recording(
             logger.warning(f"S3 upload failed, falling back to local: {e}")
             local_dir = Path("recordings") / email_folder
             local_dir.mkdir(parents=True, exist_ok=True)
-            file_path = local_dir / filename
-            file_path.write_bytes(video_bytes)
-            logger.info(f"💾 Saved locally: {file_path}")
-            return str(file_path)
+            target_path = local_dir / filename
+            if file_path and Path(file_path).exists() and file_path != target_path:
+                import shutil
+                shutil.copyfile(str(file_path), str(target_path))
+            elif video_bytes:
+                target_path.write_bytes(video_bytes)
+            logger.info(f"💾 Saved locally: {target_path}")
+            return str(target_path)
 
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _upload)

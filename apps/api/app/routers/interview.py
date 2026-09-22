@@ -638,6 +638,8 @@ async def transcribe_audio(
 
         mime_type = file.content_type or "audio/webm"
         transcript_text = await transcribe_audio_bytes(content, mime_type=mime_type)
+        del content
+        import gc; gc.collect()
         return {"transcript": transcript_text or ""}
     except Exception as e:
         print(f"Transcribe audio endpoint error: {e}")
@@ -1467,16 +1469,25 @@ async def upload_recording(
     """
     import logging as _log
     _logger = _log.getLogger(__name__)
+    safe_session = session_id.replace('/', '_').replace('..', '_')
+    local_path = VIDEO_CACHE_DIR / f"{safe_session}.webm"
+    file_size = 0
+
     try:
-        video_bytes = await file.read()
-        if not video_bytes:
+        # ── Step 1: Stream to disk in 64KB chunks to keep RAM footprint minimal (<1MB) ─
+        import shutil
+        import gc
+        with open(local_path, "wb") as f_out:
+            while chunk := await file.read(65536):
+                f_out.write(chunk)
+                file_size += len(chunk)
+
+        if file_size == 0:
+            if local_path.exists():
+                local_path.unlink()
             raise HTTPException(status_code=400, detail="Empty video file received.")
 
-        # ── Step 1: Cache locally FIRST (always works, instant) ──────────────────
-        safe_session = session_id.replace('/', '_').replace('..', '_')
-        local_path = VIDEO_CACHE_DIR / f"{safe_session}.webm"
-        local_path.write_bytes(video_bytes)
-        _logger.info(f"✅ Video cached locally: {local_path} ({len(video_bytes):,} bytes)")
+        _logger.info(f"✅ Video streamed directly to disk: {local_path} ({file_size:,} bytes)")
 
         from app.core.config import settings
         base_url = settings.API_BASE_URL  # http://localhost:8000
@@ -1527,19 +1538,19 @@ async def upload_recording(
 
         module_name = f"Module_{bond_year}"
 
-        # ── Step 2: Upload to S3 under candidates/{email}/videos/ ────────────────
+        # ── Step 2: Upload to S3 directly from disk file without loading into RAM ──
         s3_url = local_serve_url  # default to local if S3 fails
         try:
             from app.services.storage_service import upload_session_recording, upsert_candidate_profile
             s3_url_result = await upload_session_recording(
                 session_id=session_id,
-                video_bytes=video_bytes,
                 candidate_email=candidate_email,
                 candidate_name=candidate_name,
                 sap_id=sap_id,
                 module_name=module_name,
                 attempt_number=attempt_number,
                 content_type=file.content_type or "video/webm",
+                file_path=local_path,
             )
             if s3_url_result and not s3_url_result.startswith("recordings"):
                 s3_url = s3_url_result
@@ -1553,6 +1564,8 @@ async def upload_recording(
             )
         except Exception as s3_err:
             _logger.warning(f"S3 upload failed (using local fallback): {s3_err}")
+        finally:
+            gc.collect()
 
         return {
             "status": "success",
@@ -1561,7 +1574,7 @@ async def upload_recording(
             "sap_id": sap_id,
             "s3_url": s3_url,
             "local_serve_url": local_serve_url,
-            "file_size_bytes": len(video_bytes),
+            "file_size_bytes": file_size,
             "message": f"Video recorded for {candidate_name} ({sap_id} | {candidate_email})",
         }
     except Exception as e:
