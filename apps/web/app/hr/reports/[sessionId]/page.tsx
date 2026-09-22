@@ -334,7 +334,11 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
     journey_so_far: (!isEmailText(commEval.transcript_breakdown?.journey_so_far) ? commEval.transcript_breakdown?.journey_so_far : "") || "Transitioned from academic foundations into hands-on enterprise software development and problem solving.",
     core_technologies: (!isEmailText(commEval.transcript_breakdown?.core_technologies) ? commEval.transcript_breakdown?.core_technologies : "") || "Focus on modern web architectures, backend services, API designs, and scalable data systems."
   };
-  const detectedKeywords: string[] = commEval.detected_keywords || ["Software Engineering", "Full Stack", "System Design", "Cloud", "Clean Architecture"];
+  const detectedKeywords: string[] = Array.isArray(commEval.detected_keywords) && commEval.detected_keywords.length > 0 
+    ? commEval.detected_keywords 
+    : (spokenTranscriptText && spokenTranscriptText !== "No spoken oral transcript recorded for this candidate."
+        ? spokenTranscriptText.split(/\s+/).filter((w: string) => w.length > 4).slice(0, 4).map((w: string) => w.replace(/[^a-zA-Z]/g, ''))
+        : ["Communication", "Professionalism"]);
   const commMetrics = commEval.metrics || {
     cadence_wpm: 135,
     speech_clarity: "High",
@@ -610,10 +614,10 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
                   </div>
                   <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: '#334155', lineHeight: 1.7 }}>
                     {(analysis.strengths && analysis.strengths.length > 0 ? analysis.strengths : [
-                      "Clear technical articulation of trained technologies (Java, Spring, Cloud fundamentals).",
+                      "Structured self-introduction and articulation of candidate background.",
                       "Demonstrated disciplined test pacing with high accuracy in numerical and logical reasoning.",
-                      "Exemplary corporate email formatting with polite greeting, clear roadmap, and formal thanks.",
-                      "High conscientiousness trait score reflecting meticulousness regarding code reviews and QA."
+                      "Formal corporate email formatting with polite greeting, clear roadmap, and professional sign-off.",
+                      "High conscientiousness trait score reflecting meticulousness regarding code quality and QA."
                     ]).map((str: string, i: number) => (
                       <li key={i}>{str}</li>
                     ))}
@@ -651,6 +655,11 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
                           <div style={{ fontSize: 11, fontWeight: 800, color: st.data?.detected ? '#16a34a' : '#dc2626', marginTop: 2 }}>
                             {st.data?.detected ? '✓ Provided' : '✗ Missing'}
                           </div>
+                          {st.data?.summary && (
+                            <div style={{ fontSize: 9.5, color: '#475569', marginTop: 3, lineHeight: 1.3, textAlign: 'left' }}>
+                              {st.data.summary}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1571,41 +1580,46 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
             </SectionCard>
 
             {/* SEGMENT 2: COGNITIVE TEST ANSWERS */}
-            <SectionCard title={`Segment 2: Cognitive Speed Test Answers (${reportData?.cognitive_results?.length || 35} Items)`} icon={<Zap size={18} />} accentColor="#059669">
-              {reportData?.cognitive_results && reportData.cognitive_results.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {reportData.cognitive_results.map((res: any, idx: number) => (
-                    <div key={idx} style={{ background: res.is_correct ? 'rgba(16,185,129,0.05)' : 'rgba(239,68,68,0.05)', border: `1px solid ${res.is_correct ? '#86efac' : '#fca5a5'}`, borderRadius: 10, padding: '14px 16px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0f172a' }}>Q{idx + 1}: {res.question}</div>
-                        <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b' }}>{res.domain}</span>
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                        {res.options.map((opt: string, optIdx: number) => {
-                          const isSelected = res.selected_index === optIdx;
-                          const isCorrect = res.correct_index === optIdx;
-                          return (
-                            <div key={optIdx} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 6, background: isCorrect ? '#dcfce7' : isSelected ? '#fee2e2' : '#f8fafc', border: `1px solid ${isCorrect ? '#86efac' : isSelected ? '#fca5a5' : '#e2e8f0'}`, color: isCorrect ? '#166534' : isSelected ? '#991b1b' : '#64748b', fontWeight: isCorrect || isSelected ? 600 : 400 }}>
-                              {optIdx + 1}. {opt}
-                              {isCorrect && <CheckCircle2 size={13} style={{ marginLeft: 'auto', color: '#16a34a' }} />}
-                              {!isCorrect && isSelected && <X size={13} style={{ marginLeft: 'auto', color: '#dc2626' }} />}
+            {(() => {
+              const cogList = reportData?.cognitive_results || analysis?.cognitive_results || analysis?.per_question_analysis_json?.cognitive_results || [];
+              const psyList = reportData?.psychometric_results || analysis?.psychometric_results || analysis?.per_question_analysis_json?.psychometric_results || [];
+              return (
+                <>
+                  <SectionCard title={`Segment 2: Cognitive Speed Test Answers (${cogList.length || 35} Items)`} icon={<Zap size={18} />} accentColor="#059669">
+                    {cogList.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {cogList.map((res: any, idx: number) => (
+                          <div key={idx} style={{ background: res.is_correct ? 'rgba(16,185,129,0.05)' : 'rgba(239,68,68,0.05)', border: `1px solid ${res.is_correct ? '#86efac' : '#fca5a5'}`, borderRadius: 10, padding: '14px 16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0f172a' }}>Q{idx + 1}: {res.question}</div>
+                              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b' }}>{res.domain}</span>
                             </div>
-                          );
-                        })}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                              {res.options.map((opt: string, optIdx: number) => {
+                                const isSelected = res.selected_index === optIdx;
+                                const isCorrect = res.correct_index === optIdx;
+                                return (
+                                  <div key={optIdx} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 6, background: isCorrect ? '#dcfce7' : isSelected ? '#fee2e2' : '#f8fafc', border: `1px solid ${isCorrect ? '#86efac' : isSelected ? '#fca5a5' : '#e2e8f0'}`, color: isCorrect ? '#166534' : isSelected ? '#991b1b' : '#64748b', fontWeight: isCorrect || isSelected ? 600 : 400 }}>
+                                    {optIdx + 1}. {opt}
+                                    {isCorrect && <CheckCircle2 size={13} style={{ marginLeft: 'auto', color: '#16a34a' }} />}
+                                    {!isCorrect && isSelected && <X size={13} style={{ marginLeft: 'auto', color: '#dc2626' }} />}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ fontSize: 12, color: '#64748b', textAlign: 'center', padding: '20px' }}>No raw cognitive items stored.</div>
-              )}
-            </SectionCard>
+                    ) : (
+                      <div style={{ fontSize: 12, color: '#64748b', textAlign: 'center', padding: '20px' }}>No raw cognitive items stored.</div>
+                    )}
+                  </SectionCard>
 
-            {/* SEGMENT 3: PSYCHOMETRIC TEST ITEM RESPONSES */}
-            <SectionCard title={`Segment 3: Psychometric Test Item Responses (${reportData?.psychometric_results?.length || 15} Items)`} icon={<Brain size={18} />} accentColor="#d97706">
-              {reportData?.psychometric_results && reportData.psychometric_results.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {reportData.psychometric_results.map((res: any, idx: number) => (
+                  {/* SEGMENT 3: PSYCHOMETRIC TEST ITEM RESPONSES */}
+                  <SectionCard title={`Segment 3: Psychometric Test Item Responses (${psyList.length || 15} Items)`} icon={<Brain size={18} />} accentColor="#d97706">
+                    {psyList.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {psyList.map((res: any, idx: number) => (
                     <div key={idx} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ flex: 1, paddingRight: 16 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1622,11 +1636,14 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
                       </div>
                     </div>
                   ))}
-                </div>
-              ) : (
-                <div style={{ fontSize: 12, color: '#64748b', textAlign: 'center', padding: '20px' }}>No raw psychometric items stored.</div>
-              )}
-            </SectionCard>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: '#64748b', textAlign: 'center', padding: '20px' }}>No raw psychometric items stored.</div>
+                  )}
+                </SectionCard>
+              </>
+            );
+          })()}
 
             {/* SEGMENT 4: VERBATIM SUBMITTED BUSINESS EMAIL */}
             <SectionCard title="Segment 4: Submitted Business Email (Verbatim Text)" icon={<Mail size={18} />} accentColor="#0284c7">

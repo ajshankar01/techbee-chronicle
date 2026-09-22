@@ -1106,14 +1106,15 @@ async def submit_session_segment(
             analysis.summary_text = existing + email_block
 
     # Store oral segment transcripts in raw notes & structured JSON for reporting
-    if req.raw_data and req.raw_data.get("transcript"):
+    if req.raw_data and req.raw_data.get("transcript") and req.segment not in ("email", "seg4") and req.raw_data.get("segment_type") != "email_submission":
         segment_label = req.segment or "seg1"
         transcript_text = req.raw_data["transcript"].strip()
         if transcript_text:
             oral_transcripts = dict(current_pq.get("oral_transcripts") or {})
             oral_transcripts[segment_label] = transcript_text
-            oral_transcripts["seg1"] = transcript_text
-            oral_transcripts["oral"] = transcript_text
+            if segment_label in ("seg1", "oral"):
+                oral_transcripts["seg1"] = transcript_text
+                oral_transcripts["oral"] = transcript_text
             current_pq["oral_transcripts"] = oral_transcripts
             analysis.per_question_analysis_json = current_pq
 

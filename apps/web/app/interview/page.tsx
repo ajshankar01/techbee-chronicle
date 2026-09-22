@@ -261,7 +261,6 @@ async function submitSegment(sessionId: string, segmentId: string, data: any) {
         cc: data.cc || "",
         subject: data.subject || "",
         body: data.body || "",
-        transcript: `To: ${data.to || "techbeechronical@hcltech.com"}\nCc: ${data.cc || "None"}\nSubject: ${data.subject}\n\n${data.body}`,
       };
     } else if (data.transcript || data.type === "oral_submission") {
       payload.raw_data = {
@@ -1385,7 +1384,7 @@ function EmailSegment({
               setBody(e.target.value);
               if (validationError) setValidationError("");
             }}
-            placeholder={`Dear TechBee Chronicle Team,\n\nI am writing to share my professional upskilling plan for the next 6 months and my long-term aspirations at HCLTech.\n\nOver the next 6 months, my primary goal is to master [mention skills, technologies, and certifications]...\n\nIn the long run, my career aspiration at HCLTech is to [describe your domain interests, leadership path, and team contributions]...\n\nThank you for your continuous support, guidance, and encouragement.\n\nWarm regards,\n${displayName}`}
+            placeholder={`Dear CMT Team,\n\nI am writing to share my professional upskilling plan for the next 6 months and my long-term aspirations at HCLTech.\n\nOver the next 6 months, my primary goal is to master [mention skills, technologies, and certifications]...\n\nIn the long run, my career aspiration at HCLTech is to [describe your domain interests, leadership path, and team contributions]...\n\nThank you for your continuous support, guidance, and encouragement.\n\nWarm regards,\n${displayName}`}
             rows={10}
             className="w-full min-h-[220px] max-h-[calc(100vh-420px)] overflow-y-auto p-4 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 leading-relaxed font-sans focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-y placeholder:text-slate-400 placeholder:leading-relaxed"
           />

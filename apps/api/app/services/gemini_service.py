@@ -440,6 +440,7 @@ def extract_keyword_explanations(transcript: str = "", detected_keywords: list =
     Extracts candidate technical keywords from speech and generates a 1-2 sentence contextual explanation
     demonstrating how the candidate applied or discussed each concept.
     """
+    import re
     text = (transcript or "").strip()
     text_lower = text.lower()
     
@@ -461,25 +462,43 @@ def extract_keyword_explanations(transcript: str = "", detected_keywords: list =
         "java": "Utilized as a robust foundation for object-oriented software engineering, multithreading, and backend systems.",
         "full stack": "Articulated hands-on competency spanning both interactive frontend views and resilient backend data pipelines.",
         "microservice": "Structured distributed application capabilities into decoupled, independently deployable service boundaries.",
-        "system design": "Demonstrated consideration for modularity, data flow, interface decoupling, and scalable architecture."
+        "system design": "Demonstrated consideration for modularity, data flow, interface decoupling, and scalable architecture.",
+        "ai": "Focused on Artificial Intelligence concepts, machine learning workflows, and automated intelligence pipelines.",
+        "artificial intelligence": "Focused on Artificial Intelligence concepts, machine learning models, and automated algorithmic reasoning.",
+        "marketing": "Applied technical problem-solving to digital marketing workflows, customer engagement, and analytics.",
+        "analytics": "Employed quantitative data analysis, performance metrics, and reporting insights to guide strategic decisions.",
+        "machine learning": "Applied statistical learning algorithms and predictive models to extract insights from structured datasets.",
+        "data": "Referenced data management, processing pipelines, or information systems.",
+        "testing": "Emphasized software verification, defect detection, and quality assurance principles."
     }
 
-    # Gather keywords
+    # Gather keywords strictly present in candidate speech
     keywords_to_process = []
-    if detected_keywords and isinstance(detected_keywords, list):
-        for kw in detected_keywords:
-            if kw and str(kw).strip() not in keywords_to_process:
-                keywords_to_process.append(str(kw).strip())
 
-    # Dynamically find technologies mentioned directly in candidate speech
-    for tech_name in known_tech_dictionary.keys():
-        if tech_name in text_lower:
-            display_title = tech_name.upper() if tech_name in ["sql", "aws", "api"] else tech_name.title()
+    # Dynamically find technologies/concepts mentioned directly in candidate speech
+    for tech_name, default_desc in known_tech_dictionary.items():
+        # Match whole words or boundary phrases in speech
+        pattern = r'\b' + re.escape(tech_name) + r'\b'
+        if re.search(pattern, text_lower):
+            display_title = tech_name.upper() if tech_name in ["sql", "aws", "api", "ai"] else tech_name.title()
             if display_title not in keywords_to_process and len(keywords_to_process) < 8:
                 keywords_to_process.append(display_title)
 
-    if not keywords_to_process:
-        keywords_to_process = ["Full Stack", "System Design", "Cloud Engineering", "REST API", "Clean Architecture"]
+    # If detected_keywords was passed from an AI call, only keep words that actually appear in speech
+    if detected_keywords and isinstance(detected_keywords, list):
+        for kw in detected_keywords:
+            kw_clean = str(kw).strip()
+            if kw_clean.lower() in text_lower and kw_clean not in keywords_to_process and len(keywords_to_process) < 8:
+                keywords_to_process.append(kw_clean)
+
+    # If speech is brief or contains general vocabulary without specific frameworks, extract candidate's actual focal terms
+    if not keywords_to_process and text.strip():
+        # Extract meaningful nouns/adjectives from candidate speech
+        candidate_words = [w.strip(".,!?;:()\"'") for w in text.split() if len(w.strip(".,!?;:()\"'")) > 3]
+        stop_words = {"this", "that", "with", "from", "have", "been", "about", "your", "they", "will", "what", "which", "there", "their", "hello", "myself", "myself,"}
+        for cw in candidate_words:
+            if cw.lower() not in stop_words and cw.title() not in keywords_to_process and len(keywords_to_process) < 5:
+                keywords_to_process.append(cw.title())
 
     import re
     sentences = [s.strip() for s in re.split(r'[.!?\n]+', text) if len(s.strip()) > 5]
@@ -497,12 +516,11 @@ def extract_keyword_explanations(transcript: str = "", detected_keywords: list =
                 break
         
         if context_sentence:
-            # Contextualized with genuine quote
-            explanation = f"Referenced during spoken explanation: '{context_sentence[:100]}...' {known_tech_dictionary.get(kw_lower, 'Demonstrated practical software engineering application within candidate background.')}"
+            explanation = f"Referenced during spoken explanation: '{context_sentence[:100]}...' {known_tech_dictionary.get(kw_lower, f'Articulated as a focal topic in candidate\'s background.')}"
         else:
             explanation = known_tech_dictionary.get(
                 kw_lower,
-                f"Referenced as a core competency and focus area in the candidate's software engineering portfolio."
+                f"Referenced directly by the candidate during their spoken response."
             )
         
         results.append({

@@ -98,16 +98,16 @@ def generate_html_email(
 
         <!-- Header -->
         <tr>
-          <td style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#4338ca 100%);padding:40px 40px 30px;">
-            <table width="100%"><tr>
+          <td bgcolor="#1e1b4b" style="background-color:#1e1b4b;background:linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#4338ca 100%);padding:40px 40px 30px;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
               <td>
-                <div style="font-family:'Segoe UI',sans-serif;font-size:22px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">
-                  Tech<span style="color:#fbbf24;">bee</span> Chronicle
+                <div style="font-family:'Segoe UI',Arial,sans-serif;font-size:24px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;line-height:1.2;">
+                  <span style="color:#ffffff;">Tech</span><span style="color:#fbbf24;">bee</span> <span style="color:#ffffff;">Chronicle</span>
                 </div>
-                <div style="font-size:11px;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:2px;margin-top:2px;">AI-Powered Interview Platform</div>
+                <div style="font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#cbd5e1;text-transform:uppercase;letter-spacing:2px;margin-top:4px;">AI-Powered Interview Platform</div>
               </td>
               <td align="right">
-                <div style="background:rgba(255,255,255,0.15);border-radius:8px;padding:8px 14px;font-size:11px;color:#c7d2fe;font-weight:600;">
+                <div style="background-color:#312e81;background:rgba(255,255,255,0.15);border-radius:8px;padding:8px 14px;font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#ffffff;font-weight:600;">
                   Module {module_level} Interview
                 </div>
               </td>
