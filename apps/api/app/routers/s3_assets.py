@@ -538,3 +538,80 @@ async def list_s3_assets(
         "bucket":        BUCKET_NAME,
         "structure":     "candidates/{email}/videos|reports/{ts}_{sid}.webm|pdf",
     }
+
+
+@router.delete("/purge-all", summary="Purge all existing reports, recordings, and candidate profiles")
+async def purge_all_assets(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Purges all existing reports, recordings, and profiles from:
+    1. AWS S3 bucket (candidates/ prefix)
+    2. Local file caches (pdf_cache, video_cache, recordings)
+    3. Database records (InterviewReport, AnalysisResult, SessionCognitiveQuestion, SessionPsychometricQuestion, CandidateResponse, SessionQuestion, InterviewSession, Candidate)
+    Leaves the system clean for fresh testing with dynamic naming format.
+    """
+    from app.core.auth import get_current_hr_user
+    from app.models.models import (
+        InterviewReport, AnalysisResult, SessionCognitiveQuestion,
+        SessionPsychometricQuestion, CandidateResponse, SessionQuestion,
+        InterviewSession, Candidate
+    )
+    from sqlalchemy import delete
+    import shutil
+    from pathlib import Path
+
+    await get_current_hr_user(credentials, db)
+
+    # 1. Delete from AWS S3
+    deleted_s3 = 0
+    try:
+        s3 = _s3_client()
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=BUCKET_NAME, Prefix="candidates/"):
+            contents = page.get("Contents", [])
+            if contents:
+                delete_objs = [{"Key": obj["Key"]} for obj in contents]
+                s3.delete_objects(Bucket=BUCKET_NAME, Delete={"Objects": delete_objs})
+                deleted_s3 += len(delete_objs)
+    except Exception as s3_err:
+        logger.warning(f"S3 purge error: {s3_err}")
+
+    # 2. Delete local file caches
+    for folder in ("pdf_cache", "video_cache", "recordings"):
+        p = Path(folder)
+        if p.exists():
+            for item in p.iterdir():
+                try:
+                    if item.is_file():
+                        item.unlink()
+                    elif item.is_dir():
+                        shutil.rmtree(item)
+                except Exception:
+                    pass
+
+    # 3. Clean DB tables
+    deleted_db = 0
+    try:
+        await db.execute(delete(InterviewReport))
+        await db.execute(delete(AnalysisResult))
+        await db.execute(delete(SessionCognitiveQuestion))
+        await db.execute(delete(SessionPsychometricQuestion))
+        await db.execute(delete(CandidateResponse))
+        await db.execute(delete(SessionQuestion))
+        await db.execute(delete(InterviewSession))
+        await db.execute(delete(Candidate))
+        await db.commit()
+        deleted_db = 1
+    except Exception as db_err:
+        logger.warning(f"Database purge error: {db_err}")
+        await db.rollback()
+
+    return {
+        "status": "success",
+        "message": "All reports, recordings, and profiles purged successfully.",
+        "s3_objects_deleted": deleted_s3,
+        "db_cleared": bool(deleted_db)
+    }
+

@@ -7,7 +7,7 @@ import {
   Search, RefreshCw, Video, Clapperboard, FileText, Download,
   ChevronDown, ChevronRight,
   ExternalLink, HardDrive, Award, Folder, FolderOpen,
-  LayoutDashboard, Clock, HelpCircle, CalendarPlus, BookOpen} from 'lucide-react';
+  LayoutDashboard, Clock, HelpCircle, CalendarPlus, BookOpen, Trash2} from 'lucide-react';
 import Card3D from '@/components/Card3D';
 
 // HexBackground3D is rendered globally in layout.tsx
@@ -87,6 +87,52 @@ export default function CandidatesPage() {
     candidate: S3Candidate;
     data: any;
   } | null>(null);
+
+  const [purging, setPurging] = useState(false);
+
+  const handlePurgeAll = async () => {
+    if (!window.confirm("Are you sure you want to delete all existing reports, recordings, and candidate profiles from Vault, Reports, and Recordings?")) {
+      return;
+    }
+    setPurging(true);
+    try {
+      // 1. Clear browser storage
+      localStorage.removeItem('latest_completed_interview_session');
+      localStorage.removeItem('interview_session_history');
+      localStorage.removeItem('latest_interview_analysis');
+      localStorage.removeItem('latest_interview_sap');
+      
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('hr_note_') || k.startsWith('candidate_') || k.startsWith('session_'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+
+      // 2. Call purge API
+      const token = sessionStorage.getItem("teams_token") || "dev-token";
+      const res = await fetch('/api/s3-list', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setCandidates([]);
+        setSelectedFile(null);
+        alert("All existing reports, recordings, and profiles have been deleted.");
+        fetchS3Data(true);
+      } else {
+        alert("Cleared local items, but server purge encountered an error.");
+        fetchS3Data(true);
+      }
+    } catch (err) {
+      console.error("Purge error:", err);
+      alert("Error while purging items.");
+    } finally {
+      setPurging(false);
+    }
+  };
 
   const togglePath = (path: string) => {
     setExpandedPaths(prev =>
@@ -379,6 +425,15 @@ export default function CandidatesPage() {
           {lastSync && (
             <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Last Sync: {lastSync}</span>
           )}
+          <button
+            onClick={handlePurgeAll}
+            disabled={purging}
+            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '8px 14px', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, transition: 'all 0.2s', fontWeight: 'bold' }}
+            title="Delete all reports, recordings, and profiles across Vault, Reports, and Recordings"
+          >
+            <Trash2 size={14} />
+            {purging ? 'Purging...' : 'Delete All Data'}
+          </button>
           <button
             onClick={() => fetchS3Data(true)}
             disabled={syncing}

@@ -9,7 +9,7 @@ import {
   XCircle, Edit3, X, Save, ExternalLink, Video, Clapperboard, Play,
   Printer, PackageOpen, SlidersHorizontal, Filter,
   LayoutDashboard, Clock, HardDrive, HelpCircle,
-  List, Grid, CalendarPlus, BarChart3, Tag, TrendingUp, MessageSquare, Star, ChevronDown, ChevronUp, BookOpen} from 'lucide-react';
+  List, Grid, CalendarPlus, BarChart3, Tag, TrendingUp, MessageSquare, Star, ChevronDown, ChevronUp, BookOpen, Trash2} from 'lucide-react';
 import Card3D from '@/components/Card3D';
 
 // HexBackground3D is rendered globally in layout.tsx
@@ -416,6 +416,49 @@ export default function ReportsPage() {
   const [dlStatuses, setDlStatuses] = useState<string[]>(['Pass', 'Needs Review', 'Fail']);
   const [dlModules, setDlModules] = useState<number[]>([1, 2, 3, 4, 5, 6]);
 
+  const [purging, setPurging] = useState(false);
+
+  const handlePurgeAll = async () => {
+    if (!window.confirm("Are you sure you want to delete all existing reports, recordings, and candidate profiles?")) {
+      return;
+    }
+    setPurging(true);
+    try {
+      localStorage.removeItem('latest_completed_interview_session');
+      localStorage.removeItem('interview_session_history');
+      localStorage.removeItem('latest_interview_analysis');
+      localStorage.removeItem('latest_interview_sap');
+      
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('hr_note_') || k.startsWith('candidate_') || k.startsWith('session_'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+
+      const token = sessionStorage.getItem("teams_token") || "dev-token";
+      const res = await fetch('/api/s3-list', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setCandidates([]);
+        alert("All existing reports, recordings, and profiles have been deleted.");
+        fetchData();
+      } else {
+        alert("Cleared local items, but server purge encountered an error.");
+        fetchData();
+      }
+    } catch (err) {
+      console.error("Purge error:", err);
+      alert("Error while purging items.");
+    } finally {
+      setPurging(false);
+    }
+  };
+
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
 
   const handleRegenerate = async (sessionId: string, candidateName: string, sapId: string, videoUrl: string) => {
@@ -797,7 +840,16 @@ export default function ReportsPage() {
         {/* Top Header Bar */}
         <div style={{ background: 'rgba(255,255,255,0.85)', borderBottom: '1px solid rgba(79, 70, 229, 0.12)', backdropFilter: 'blur(20px)', padding: '14px 32px', display: 'flex', alignItems: 'center', gap: 14, zIndex: 40 }}>
           <div style={{ flex: 1 }} />
-          <button onClick={() => router.push('/hr/vault')} style={{ background: 'rgba(79,70,229,0.08)', border: '1px solid rgba(79,70,229,0.15)', borderRadius: 8, padding: '8px 14px', color: 'var(--color-brand)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 'bold', transition: 'all 0.2s' }}>
+          <button
+            onClick={handlePurgeAll}
+            disabled={purging}
+            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '8px 14px', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, transition: 'all 0.2s', fontWeight: 'bold' }}
+            title="Delete all reports, recordings, and profiles across Vault, Reports, and Recordings"
+          >
+            <Trash2 size={14} />
+            {purging ? 'Purging...' : 'Delete All Data'}
+          </button>
+          <button onClick={() => { fetchData(); }} style={{ background: 'rgba(79,70,229,0.08)', border: '1px solid rgba(79,70,229,0.15)', borderRadius: 8, padding: '8px 14px', color: 'var(--color-brand)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 'bold', transition: 'all 0.2s' }}>
             <RefreshCw size={14} /> Sync Vault
           </button>
           <button

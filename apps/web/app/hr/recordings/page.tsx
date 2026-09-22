@@ -6,7 +6,7 @@ import Image from 'next/image';
 import {
   Play, Download, Video, Clapperboard, Search, Calendar,
   RefreshCw, X, Film, LayoutDashboard, Clock, HardDrive, FileText, HelpCircle,
-  List, Grid, CalendarPlus, BookOpen} from 'lucide-react';
+  List, Grid, CalendarPlus, BookOpen, Trash2} from 'lucide-react';
 import Card3D from '@/components/Card3D';
 
 interface S3Video {
@@ -93,7 +93,49 @@ export default function VideosPage() {
   const [filterModule, setFilterModule] = useState<FilterModuleType>('All');
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [videoModal, setVideoModal] = useState<{ url: string; name: string; moduleName: string } | null>(null);
+  const [purging, setPurging] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+
+  const handlePurgeAll = async () => {
+    if (!window.confirm("Are you sure you want to delete all existing reports, recordings, and candidate profiles?")) {
+      return;
+    }
+    setPurging(true);
+    try {
+      localStorage.removeItem('latest_completed_interview_session');
+      localStorage.removeItem('interview_session_history');
+      localStorage.removeItem('latest_interview_analysis');
+      localStorage.removeItem('latest_interview_sap');
+      
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('hr_note_') || k.startsWith('candidate_') || k.startsWith('session_'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+
+      const token = sessionStorage.getItem("teams_token") || "dev-token";
+      const res = await fetch('/api/s3-list', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setCandidates([]);
+        alert("All existing reports, recordings, and profiles have been deleted.");
+        fetchData();
+      } else {
+        alert("Cleared local items, but server purge encountered an error.");
+        fetchData();
+      }
+    } catch (err) {
+      console.error("Purge error:", err);
+      alert("Error while purging items.");
+    } finally {
+      setPurging(false);
+    }
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem('view_mode_videos') as 'list' | 'grid';
@@ -319,6 +361,15 @@ export default function VideosPage() {
           {lastSync && (
             <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Last Sync: {lastSync}</span>
           )}
+          <button
+            onClick={handlePurgeAll}
+            disabled={purging}
+            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '8px 14px', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, transition: 'all 0.2s', fontWeight: 'bold' }}
+            title="Delete all reports, recordings, and profiles across Vault, Reports, and Recordings"
+          >
+            <Trash2 size={14} />
+            {purging ? 'Purging...' : 'Delete All Data'}
+          </button>
           <button onClick={() => fetchData(true)} disabled={syncing} style={{ background: 'var(--gradient-brand)', border: 'none', borderRadius: 8, padding: '8px 14px', color: '#ffffff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 'bold', boxShadow: '0 4px 0 #3b1bb6, 0 4px 10px rgba(79,70,229,0.2)' }}>
             <RefreshCw size={14} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} /> {syncing ? 'Syncing...' : 'Sync Vault'}
           </button>

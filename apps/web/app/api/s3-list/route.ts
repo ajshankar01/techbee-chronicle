@@ -26,3 +26,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const authHeader = req.headers.get('Authorization') || req.headers.get('authorization') || '';
+    const res = await fetch(`${API_URL}/api/s3/purge-all`, {
+      method: 'DELETE',
+      headers: authHeader ? { 'Authorization': authHeader } : {},
+      cache: 'no-store',
+    });
+    const data = await res.json();
+    return NextResponse.json(data, { status: res.status });
+  } catch (err) {
+    console.error('Error in purge proxy API:', err);
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
+}
+
