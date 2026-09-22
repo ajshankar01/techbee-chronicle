@@ -21,7 +21,14 @@ from app.models.models import (
     SessionQuestion, CandidateResponse,
 )
 from app.services.storage_service import get_signed_recording_url
-from app.services.gemini_service import evaluate_star_framework
+from app.services.gemini_service import (
+    evaluate_star_framework,
+    evaluate_email_critique,
+    evaluate_oral_critique,
+    extract_keyword_explanations,
+    generate_dynamic_corporate_survival,
+    generate_dynamic_granular_roadmap,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +43,12 @@ def _parse_oral_transcripts(raw_text: str = "", pq_json: dict = None, cr_transcr
     """Parse oral segment transcripts stored in per_question_analysis_json, candidate_responses, or summary_text as [TRANSCRIPT:segX] blocks."""
     result = {}
     if pq_json and isinstance(pq_json, dict) and pq_json.get("oral_transcripts"):
-        result.update(pq_json["oral_transcripts"])
+        for k, v in pq_json["oral_transcripts"].items():
+            if isinstance(v, str) and not v.strip().startswith("To:") and "[EMAIL_SUBMISSION" not in v:
+                result[k] = v.strip()
     if cr_transcript:
         cr_t = cr_transcript.strip()
-        if cr_t:
+        if cr_t and not cr_t.startswith("To:") and "[EMAIL_SUBMISSION" not in cr_t:
             result.setdefault("seg1", cr_t)
             result.setdefault("oral", cr_t)
             result.setdefault("oral_intro", cr_t)
@@ -49,7 +58,7 @@ def _parse_oral_transcripts(raw_text: str = "", pq_json: dict = None, cr_transcr
         for m in pattern.finditer(raw_text):
             segment_label = m.group(1).strip()
             transcript = m.group(2).strip()
-            if transcript:
+            if transcript and not transcript.startswith("To:") and "[EMAIL_SUBMISSION" not in transcript:
                 result[segment_label] = transcript
                 if segment_label in ("oral", "oral_intro"):
                     result["seg1"] = transcript
@@ -151,12 +160,13 @@ async def get_session_report(
                 .where(
                     CandidateResponse.session_id == session_uuid,
                     CandidateResponse.transcript_text.isnot(None),
-                    CandidateResponse.transcript_text != ""
+                    CandidateResponse.transcript_text != "",
+                    SessionQuestion.question_type == QuestionType.COMMUNICATION
                 )
                 .order_by(SessionQuestion.order_index)
             )
             cr_first = cr_lookup.scalars().first()
-            if cr_first:
+            if cr_first and not cr_first.strip().startswith("To:") and "[EMAIL_SUBMISSION" not in cr_first:
                 candidate_oral_transcript = cr_first.strip()
 
             transcript_data = report.full_transcript_json if (report and report.full_transcript_json) else []
@@ -314,16 +324,31 @@ async def get_session_report(
             email_eval = pq_json.get("email_evaluation")
             email_score = pq_json.get("email_writing_score") or (email_eval.get("etiquette_score") if email_eval else 85)
 
-            # Evaluate STAR framework dynamically using candidate's actual oral transcript & email submission
+            # Evaluate STAR framework dynamically using candidate's actual oral transcript & email submission separately
             email_body_text = email_sub.get("body", "") if isinstance(email_sub, dict) else ""
             existing_star = comm_eval.get("star_evaluation")
-            # If star_evaluation is missing or has the legacy static template text, compute dynamically from candidate text
             is_legacy_static = (
                 isinstance(existing_star, dict)
                 and existing_star.get("narrative") == "Candidate provided Situation & Result, but failed to detail specific Task and Action."
             )
             if not existing_star or is_legacy_static:
-                comm_eval["star_evaluation"] = evaluate_star_framework(candidate_oral_transcript, email_body_text)
+                comm_eval["star_evaluation"] = evaluate_star_framework(candidate_oral_transcript, domain="oral")
+
+            if not comm_eval.get("critique"):
+                comm_eval["critique"] = evaluate_oral_critique(candidate_oral_transcript, comm_eval)
+
+            if not comm_eval.get("keyword_explanations"):
+                comm_eval["keyword_explanations"] = extract_keyword_explanations(candidate_oral_transcript, comm_eval.get("detected_keywords", []))
+
+            if email_sub:
+                if not email_eval:
+                    email_eval = {}
+                existing_email_star = email_eval.get("star_evaluation")
+                if not existing_email_star or (isinstance(existing_email_star, dict) and existing_email_star.get("narrative") == "Candidate provided Situation & Result, but failed to detail specific Task and Action."):
+                    email_eval["star_evaluation"] = evaluate_star_framework(email_body_text, domain="email")
+                if not email_eval.get("critique"):
+                    email_eval["critique"] = evaluate_email_critique(email_sub, email_eval)
+
             vm_eval = pq_json.get("vision_and_mission_evaluation") or {
                 "score": analysis.vision_and_mission_score or 84,
                 "ambition_rating": "High",
@@ -332,104 +357,33 @@ async def get_session_report(
                 "feasibility_analysis": "Technical roadmap aligns closely with HCLTech's enterprise client service demands."
             }
 
-            # 4-Segment Survival Calculation
+            # 4-Segment Dynamic Survival Calculation
             c_comm = float(analysis.communication_score or 80.0) if analysis else 80.0
             c_cog = float(analysis.cognitive_composite_score or 80.0) if analysis else 80.0
             c_psy = float(analysis.psychometric_score or 80.0) if analysis else 80.0
             c_email = float(email_score or 80.0)
-            exact_surv_idx = int(round((0.25 * c_comm) + (0.25 * c_cog) + (0.25 * c_psy) + (0.25 * c_email)))
 
-            surv_eval = pq_json.get("corporate_survival_evaluation") or {}
-            surv_eval["survival_index"] = exact_surv_idx
-            surv_eval["segment_formula"] = "Survival Index = 0.25*(Communication) + 0.25*(Cognitive) + 0.25*(Psychometric) + 0.25*(Email Writing)"
-            surv_eval["segment_inputs"] = {
-                "communication": c_comm,
-                "cognitive": c_cog,
-                "psychometric": c_psy,
-                "email_writing": c_email
-            }
-            if not surv_eval.get("pressure_resilience_score"):
-                surv_eval["pressure_resilience_score"] = 84
-            if not surv_eval.get("collaboration_readiness_score"):
-                surv_eval["collaboration_readiness_score"] = 88
-            if not surv_eval.get("retention_risk"):
-                surv_eval["retention_risk"] = (analysis.advanced_report_json or {}).get("retention_risk", "Low") if analysis else "Low"
-            if not surv_eval.get("retention_score"):
-                surv_eval["retention_score"] = (analysis.advanced_report_json or {}).get("retention_score", 85) if analysis else 85
-            if not surv_eval.get("longevity_forecast"):
-                surv_eval["longevity_forecast"] = "Stable corporate survival trajectory with regular mentoring."
+            # Generate dynamic survival evaluation grounded in actual segment scores
+            surv_eval = generate_dynamic_corporate_survival(
+                c_comm=c_comm,
+                c_cog=c_cog,
+                c_psy=c_psy,
+                c_email=c_email,
+                candidate_oral_transcript=oral_transcripts.get("seg1") or oral_transcripts.get("oral") or "",
+                email_sub=email_sub
+            )
 
-            if not surv_eval.get("decision_reasons") or len(surv_eval.get("decision_reasons", [])) < 3:
-                surv_eval["decision_reasons"] = [
-                    "Demonstrated composure and steady problem-solving consistency under timed assessment pressure.",
-                    "High conscientiousness and rule compliance ensure low defect leakage during code and task delivery.",
-                    "Balanced psychological profile reflects healthy emotional regulation and high willingness to receive technical feedback without friction."
-                ]
-            else:
-                surv_eval["decision_reasons"] = surv_eval["decision_reasons"][:3]
-
-            if not surv_eval.get("improvement_areas") or len(surv_eval.get("improvement_areas", [])) < 3:
-                surv_eval["improvement_areas"] = [
-                    "Build confidence in articulating independent technical decisions during squad architecture reviews.",
-                    "Proactively escalate blockers in sprint standups rather than waiting for scheduled 1:1 check-ins.",
-                    "Transition from guided execution to self-driven resolution for unfamiliar technology spikes."
-                ]
-            else:
-                surv_eval["improvement_areas"] = surv_eval["improvement_areas"][:3]
-            gran_imp = pq_json.get("granular_improvements") or {
-                "oral_communication": {
-                    "gaps": [
-                        "Hesitation and verbal pauses when framing multi-layered technical explanations.",
-                        "Under-elaboration on framework architecture internals and trade-offs.",
-                        "Informal conversational transitions instead of structured STAR delivery."
-                    ],
-                    "recommendations": [
-                        "Practice the STAR method (Situation, Task, Action, Result) to concisely deliver technical arguments.",
-                        "Record mock sprint demos and review to eliminate conversational filler pauses.",
-                        "Deepen articulation of underlying data structures, API contracts, and trade-offs."
-                    ],
-                    "score_deduction_rationale": "Communication score adjusted to 85% (-10% for uneven pacing and filler pauses, -5% for limited architectural depth in spoken responses)."
-                },
-                "email_writing": {
-                    "gaps": [
-                        "Lacks specific week-by-week delivery checkpoints and target completion dates.",
-                        "Missing clear bulleted breakdown of actionable technical milestones.",
-                        "Closing sign-off lacks explicit mention of team enablement and knowledge sharing."
-                    ],
-                    "recommendations": [
-                        "Structure body paragraphs using crisp bullet points for high executive readability.",
-                        "Incorporate explicit quarterly milestone dates and certification exam deadlines.",
-                        "Align proposed upskilling goals directly to client project deliverables and squad outcomes."
-                    ],
-                    "score_deduction_rationale": "Email score adjusted to 88% (-7% for missing intermediate milestones, -5% for dense paragraph formatting without bullet points)."
-                },
-                "cognitive_accuracy": {
-                    "gaps": [
-                        "Rushed through multi-step numerical problem constraints under strict timer limits.",
-                        "Unattempted or hurried items in later abstract pattern sequences.",
-                        "Overlooked edge-case conditions during fast data verification tasks."
-                    ],
-                    "recommendations": [
-                        "Allocate 15-20 seconds per question to double-check boundary constraints before submitting.",
-                        "Pace answers evenly across all question domains to prevent end-of-test time crunches.",
-                        "Practice systematic elimination techniques on multi-variable logical reasoning problems."
-                    ],
-                    "score_deduction_rationale": "Cognitive composite score capped at 84% (-10% penalty for wrong attempts under speed pressure, -6% for unoptimized pacing)."
-                },
-                "workplace_culture": {
-                    "gaps": [
-                        "Tendency to work in silos when encountering technical blockers before seeking peer help.",
-                        "Reserved participation in technical debates during collaborative sessions.",
-                        "Hesitation in asking senior engineers for architectural clarification early."
-                    ],
-                    "recommendations": [
-                        "Participate actively and voice ideas in daily team standups and technical retrospectives.",
-                        "Proactively share documentation, guides, and lesson-learned notes with peers.",
-                        "Adopt an 'escalate early' mindset when blocked for more than 30 minutes on complex tasks."
-                    ],
-                    "score_deduction_rationale": "Collaboration score adjusted to 88% (-7% to encourage earlier blocker communication, -5% for reserved technical debate engagement)."
-                }
-            }
+            # Generate dynamic granular roadmap with tailored deductions & recommendations
+            gran_imp = generate_dynamic_granular_roadmap(
+                c_comm=c_comm,
+                c_cog=c_cog,
+                c_psy=c_psy,
+                c_email=c_email,
+                candidate_oral_transcript=oral_transcripts.get("seg1") or oral_transcripts.get("oral") or "",
+                email_sub=email_sub,
+                cognitive_results=raw_cog_list,
+                psychometric_results=raw_psy_list
+            )
 
             # Year-over-Year progress calculation
             yoy_data = {"has_yoy": False}
@@ -1199,8 +1153,48 @@ async def generate_and_upload_pdf(
 
         pdf_comm_eval = (existing_ar.per_question_analysis_json.get("communication_evaluation") if (existing_ar and existing_ar.per_question_analysis_json) else {}) or (analysis.get("communication_evaluation") if 'analysis' in locals() and analysis else {})
         if not pdf_comm_eval.get("star_evaluation") or (isinstance(pdf_comm_eval.get("star_evaluation"), dict) and pdf_comm_eval["star_evaluation"].get("narrative") == "Candidate provided Situation & Result, but failed to detail specific Task and Action."):
-            pdf_email_body = email_sub.get("body", "") if isinstance(email_sub, dict) else ""
-            pdf_comm_eval["star_evaluation"] = evaluate_star_framework(oral_txt or cr_transcript_text, pdf_email_body)
+            pdf_comm_eval["star_evaluation"] = evaluate_star_framework(oral_txt or cr_transcript_text, domain="oral")
+
+        if not pdf_comm_eval.get("critique"):
+            pdf_comm_eval["critique"] = evaluate_oral_critique(oral_txt or cr_transcript_text, pdf_comm_eval)
+
+        if not pdf_comm_eval.get("keyword_explanations"):
+            pdf_comm_eval["keyword_explanations"] = extract_keyword_explanations(oral_txt or cr_transcript_text, pdf_comm_eval.get("detected_keywords", []))
+
+        if email_sub:
+            if not email_eval:
+                email_eval = {}
+            if not email_eval.get("star_evaluation") or (isinstance(email_eval.get("star_evaluation"), dict) and email_eval["star_evaluation"].get("narrative") == "Candidate provided Situation & Result, but failed to detail specific Task and Action."):
+                pdf_email_body = email_sub.get("body", "") if isinstance(email_sub, dict) else ""
+                email_eval["star_evaluation"] = evaluate_star_framework(pdf_email_body, domain="email")
+            if not email_eval.get("critique"):
+                email_eval["critique"] = evaluate_email_critique(email_sub, email_eval)
+
+
+        pdf_c_comm = float(scores.get("communication") or (existing_ar.communication_score if existing_ar else 80.0) or 80.0)
+        pdf_c_cog = float((existing_ar.cognitive_composite_score if existing_ar else scores.get("cognitive_ability")) or 80.0)
+        pdf_c_psy = float((existing_ar.psychometric_score if existing_ar else scores.get("psychometric")) or 80.0)
+        pdf_c_email = float(scores.get("email_writing") or (email_eval.get("etiquette_score") if email_eval else 80.0) or 80.0)
+
+        pdf_corp_surv = generate_dynamic_corporate_survival(
+            c_comm=pdf_c_comm,
+            c_cog=pdf_c_cog,
+            c_psy=pdf_c_psy,
+            c_email=pdf_c_email,
+            candidate_oral_transcript=oral_txt or cr_transcript_text,
+            email_sub=email_sub
+        )
+
+        pdf_gran_imp = generate_dynamic_granular_roadmap(
+            c_comm=pdf_c_comm,
+            c_cog=pdf_c_cog,
+            c_psy=pdf_c_psy,
+            c_email=pdf_c_email,
+            candidate_oral_transcript=oral_txt or cr_transcript_text,
+            email_sub=email_sub,
+            cognitive_results=raw_cog_list if 'raw_cog_list' in locals() else [],
+            psychometric_results=raw_psy_list if 'raw_psy_list' in locals() else []
+        )
 
         report_data = {
             "session_id": session_id,
@@ -1227,7 +1221,8 @@ async def generate_and_upload_pdf(
                 "email_submission": email_sub,
                 "email_evaluation": email_eval,
                 "communication_evaluation": pdf_comm_eval,
-                "corporate_survival_evaluation": (existing_ar.per_question_analysis_json.get("corporate_survival_evaluation") if (existing_ar and existing_ar.per_question_analysis_json) else {}) or (analysis.get("corporate_survival_evaluation") if 'analysis' in locals() and analysis else {}),
+                "corporate_survival_evaluation": pdf_corp_surv,
+                "granular_improvements": pdf_gran_imp,
                 "behavioral": behavioral_scores,
                 "summary_text": summary_text,
                 "strengths": strengths_list,

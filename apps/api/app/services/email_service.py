@@ -148,13 +148,29 @@ def generate_html_email(
               </tr>
             </table>
 
-            <!-- CTA Button -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-              <tr><td align="center">
-                <a href="{interview_url}" style="display:inline-block;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:16px 48px;border-radius:12px;box-shadow:0 4px 16px rgba(79,70,229,0.4);">
-                  Start My Interview →
-                </a>
-              </td></tr>
+            <!-- CTA Button (Bulletproof for Outlook / O365 / Webmail) -->
+            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;">
+              <tr>
+                <td align="center">
+                  <!--[if mso]>
+                  <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{interview_url}" style="height:52px;v-text-anchor:middle;width:260px;" arcsize="20%" stroke="f" fillcolor="#4f46e5">
+                    <w:anchorlock/>
+                    <center style="color:#ffffff;font-family:'Segoe UI',sans-serif;font-size:16px;font-weight:bold;">Start My Interview &rarr;</center>
+                  </v:roundrect>
+                  <![endif]-->
+                  <!--[if !mso]><!-->
+                  <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;">
+                    <tr>
+                      <td align="center" bgcolor="#4f46e5" style="border-radius:12px;background-color:#4f46e5;background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);box-shadow:0 4px 16px rgba(79,70,229,0.4);">
+                        <a href="{interview_url}" target="_blank" style="display:inline-block;padding:16px 44px;font-family:'Segoe UI',Inter,sans-serif;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:12px;border:1px solid #4f46e5;background-color:#4f46e5;mso-padding-alt:0;">
+                          <span style="color:#ffffff;font-weight:700;text-decoration:none;">Start My Interview &rarr;</span>
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+                  <!--<![endif]-->
+                </td>
+              </tr>
             </table>
 
             <!-- Instructions -->

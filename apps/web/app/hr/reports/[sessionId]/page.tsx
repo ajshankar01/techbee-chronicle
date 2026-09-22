@@ -303,24 +303,36 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
     }
   };
 
-  // Oral Transcript & Breakdown Extraction
-  const oralTranscriptRaw: string = 
-    reportData?.oral_transcripts?.seg1 || 
-    reportData?.oral_transcripts?.oral || 
-    reportData?.oral_transcripts?.oral_intro || 
-    (typeof reportData?.oral_transcripts === 'string' ? reportData.oral_transcripts : "");
+  // Oral Transcript & Breakdown Extraction (Strictly oral speech - NEVER fall back to email submission)
+  const isEmailText = (txt: string) => {
+    if (!txt) return false;
+    const trimmed = txt.trim();
+    return trimmed.startsWith("To:") || trimmed.includes("[EMAIL_SUBMISSION") || (trimmed.includes("techbeechronical@hcltech.com") && trimmed.includes("Subject:"));
+  };
+
+  const rawOralCandidates = [
+    reportData?.oral_transcripts?.seg1,
+    reportData?.oral_transcripts?.oral,
+    reportData?.oral_transcripts?.oral_intro,
+    typeof reportData?.oral_transcripts === 'string' ? reportData.oral_transcripts : ""
+  ].filter((t) => t && !isEmailText(t));
+
+  const oralTranscriptRaw: string = rawOralCandidates.length > 0 ? rawOralCandidates[0] : "";
   const fullTranscriptList: any[] = reportData?.full_transcript || [];
-  const candidateSpokenEntries = fullTranscriptList.filter((t: any) => t.speaker === 'candidate' && t.text);
+  const candidateSpokenEntries = fullTranscriptList.filter(
+    (t: any) => t.speaker === 'candidate' && t.text && !isEmailText(t.text) && t.question_type !== 'email'
+  );
+  
   const spokenTranscriptText: string = 
     oralTranscriptRaw || 
     (candidateSpokenEntries.length > 0 ? candidateSpokenEntries[0].text : "") || 
-    commEval.evidence_quote || 
-    "No spoken transcript recorded for this session.";
+    (!isEmailText(commEval.evidence_quote) ? commEval.evidence_quote : "") || 
+    "No spoken oral transcript recorded for this candidate.";
   
   const transcriptBreakdown = {
-    self_introduction: commEval.transcript_breakdown?.self_introduction || spokenTranscriptText,
-    journey_so_far: commEval.transcript_breakdown?.journey_so_far || "Transitioned from academic foundations into hands-on enterprise software development and problem solving.",
-    core_technologies: commEval.transcript_breakdown?.core_technologies || "Focus on modern web architectures, backend services, API designs, and scalable data systems."
+    self_introduction: (!isEmailText(commEval.transcript_breakdown?.self_introduction) ? commEval.transcript_breakdown?.self_introduction : "") || spokenTranscriptText,
+    journey_so_far: (!isEmailText(commEval.transcript_breakdown?.journey_so_far) ? commEval.transcript_breakdown?.journey_so_far : "") || "Transitioned from academic foundations into hands-on enterprise software development and problem solving.",
+    core_technologies: (!isEmailText(commEval.transcript_breakdown?.core_technologies) ? commEval.transcript_breakdown?.core_technologies : "") || "Focus on modern web architectures, backend services, API designs, and scalable data systems."
   };
   const detectedKeywords: string[] = commEval.detected_keywords || ["Software Engineering", "Full Stack", "System Design", "Cloud", "Clean Architecture"];
   const commMetrics = commEval.metrics || {
@@ -330,7 +342,7 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
     filler_pause_ratio: "Low (1-2 pauses/min)"
   };
 
-  // STAR Evaluation
+  // Dedicated Oral STAR Evaluation (Segment 1)
   const starEvaluation = commEval.star_evaluation || {
     situation: { detected: true, summary: "Provided initial context and project background." },
     task: { detected: false, summary: "Failed to articulate specific technical constraints and milestone targets." },
@@ -338,6 +350,52 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
     result: { detected: true, summary: "Highlighted project outcome, deployment, and key metrics achieved." },
     narrative: "Candidate provided Situation & Result, but failed to detail specific Task and Action."
   };
+
+  // Structured Oral Communication Critique (Segment 1: What was Wrong, Why it Matters, Areas of Improvement)
+  const oralCritiqueList = commEval.critique && Array.isArray(commEval.critique) && commEval.critique.length > 0 ? commEval.critique : [
+    {
+      what_was_wrong: "Under-elaboration on architecture trade-offs and component design rationale.",
+      why_it_matters: "In squad architecture reviews, engineering managers look for candidates who understand why a specific technology or pattern was chosen over alternatives.",
+      areas_of_improvement: "When naming technologies, explicitly mention at least one design constraint, API contract, or trade-off considered during implementation."
+    },
+    {
+      what_was_wrong: "Concluded technical project narrative without quantitative impact or production verification metrics.",
+      why_it_matters: "Without measurable outcomes, stakeholders cannot gauge the real-world success or business value delivered by the candidate's work.",
+      areas_of_improvement: "Anchor the conclusion of every project story with a verifiable metric, such as latency reduction, test coverage percentage, or deployment stability."
+    }
+  ];
+
+  // Keywords Used & Contextual Technical Explanations (Segment 1)
+  const keywordExplanations: Array<{ keyword: string; explanation: string }> = 
+    commEval.keyword_explanations && Array.isArray(commEval.keyword_explanations) && commEval.keyword_explanations.length > 0 
+      ? commEval.keyword_explanations 
+      : detectedKeywords.map((kw: string) => ({
+          keyword: kw,
+          explanation: `Demonstrated practical software engineering application of ${kw} within candidate technical background and enterprise modules.`
+        }));
+
+  // Dedicated Email STAR Evaluation (Segment 4)
+  const emailStarEvaluation = emailEval.star_evaluation || {
+    situation: { detected: true, summary: "Outlined context regarding training completion and corporate transition." },
+    task: { detected: false, summary: "Omitted explicit milestone deadlines and technical task boundaries." },
+    action: { detected: false, summary: "Lacks bulleted technical learning actions and tooling steps." },
+    result: { detected: true, summary: "Highlighted target aspirations and long-term synergy with HCLTech." },
+    narrative: "Candidate stated situation and long-term aspirations, but needs clearer milestone tasks and action steps."
+  };
+
+  // Structured Email Critique (Segment 4)
+  const emailCritiqueList = emailEval.critique && Array.isArray(emailEval.critique) && emailEval.critique.length > 0 ? emailEval.critique : [
+    {
+      what_was_wrong: "Dense paragraph structure without bulleted milestone checkpoints.",
+      why_it_matters: "In enterprise client communication, dense paragraphs increase cognitive load and obscure key deliverables from busy stakeholders.",
+      areas_of_improvement: "Break down training goals, tools, and timelines into concise bullet points or numbered action items for quick executive scanning."
+    },
+    {
+      what_was_wrong: "Lacks specific calendar targets, quarterly checkpoints, or completion dates.",
+      why_it_matters: "Without defined timelines, managers cannot measure execution cadence or track accountability against project schedules.",
+      areas_of_improvement: "Specify clear intermediate deadlines (e.g., 'Target Completion: Month 3' or 'Certification Exam: Q3')."
+    }
+  ];
 
   // Year-over-Year Progression
   const yoy = analysis?.yoy_progress || { has_yoy: false };
@@ -720,6 +778,40 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
                 </div>
               </div>
 
+              {/* Communication STAR Framework Breakdown Card */}
+              <div style={{ background: '#f8fafc', border: '1.5px solid #e0e7ff', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Sparkles size={14} color="#6366f1" /> Spoken STAR Competency Framework Evaluation:
+                  </span>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#4338ca', background: '#e0e7ff', padding: '2px 8px', borderRadius: 12 }}>
+                    Oral Technical Articulation
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 10 }}>
+                  {[
+                    { label: 'Situation', data: starEvaluation.situation },
+                    { label: 'Task', data: starEvaluation.task },
+                    { label: 'Action', data: starEvaluation.action },
+                    { label: 'Result', data: starEvaluation.result },
+                  ].map((st) => (
+                    <div key={st.label} style={{ background: '#ffffff', border: `1.5px solid ${st.data?.detected ? '#86efac' : '#fca5a5'}`, borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>{st.label}</div>
+                      <div style={{ fontSize: 11.5, fontWeight: 800, color: st.data?.detected ? '#16a34a' : '#dc2626', marginTop: 2 }}>
+                        {st.data?.detected ? '✓ Provided' : '✗ Missing'}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#64748b', marginTop: 4, lineHeight: 1.3 }}>
+                        {st.data?.summary || ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11.5, color: '#475569', lineHeight: 1.5, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '8px 12px' }}>
+                  <strong style={{ color: '#0f172a' }}>Verbal Delivery Assessment: </strong>
+                  {starEvaluation.narrative || "Candidate structured technical speech with clear Situation and Result."}
+                </div>
+              </div>
+
               {/* Exact Reason & Scoring Rationale */}
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>Why this score was awarded (Evaluation Reason & Calculation):</div>
@@ -739,6 +831,72 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
                   </ul>
                 </div>
               )}
+
+              {/* Keywords Used by Candidate & Contextual Explanations */}
+              <div style={{ background: '#f8fafc', border: '1.5px solid #e0e7ff', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: '#312e81', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Sparkles size={15} color="#6366f1" /> Technical Concepts &amp; Keywords Mentioned (With Contextual Explanation):
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
+                  {keywordExplanations.map((item, kIdx) => (
+                    <div key={kIdx} style={{ background: '#ffffff', border: '1px solid #c7d2fe', borderRadius: 8, padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 800, color: '#4338ca', background: '#e0e7ff', padding: '2px 8px', borderRadius: 12 }}>
+                          #{item.keyword}
+                        </span>
+                        <span style={{ fontSize: 9.5, fontWeight: 600, color: '#64748b' }}>Technical Concept</span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 11.5, color: '#334155', lineHeight: 1.5 }}>
+                        {item.explanation}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Structured Oral Communication Critique: What was Wrong, Why it Matters, Areas of Improvement */}
+              <div style={{ background: '#ffffff', border: '1.5px solid #c7d2fe', borderRadius: 12, padding: '16px 18px', marginBottom: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#1e1b4b', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AlertCircle size={16} color="#6366f1" /> Spoken Communication Evaluation Critique &amp; Improvement Analysis:
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {oralCritiqueList.map((critique: any, oIdx: number) => (
+                    <div key={oIdx} style={{ background: '#f8fafc', border: '1px solid #e0e7ff', borderRadius: 10, padding: '12px 14px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 12 }}>
+                        {/* What was wrong */}
+                        <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 8, padding: '10px 12px' }}>
+                          <div style={{ fontSize: 10.5, fontWeight: 800, color: '#e11d48', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            ❌ What was Wrong:
+                          </div>
+                          <div style={{ fontSize: 11.5, color: '#881337', lineHeight: 1.5 }}>
+                            {critique.what_was_wrong}
+                          </div>
+                        </div>
+
+                        {/* Why it matters */}
+                        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px' }}>
+                          <div style={{ fontSize: 10.5, fontWeight: 800, color: '#d97706', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            ⚠️ Why it Matters:
+                          </div>
+                          <div style={{ fontSize: 11.5, color: '#78350f', lineHeight: 1.5 }}>
+                            {critique.why_it_matters}
+                          </div>
+                        </div>
+
+                        {/* Areas of improvement */}
+                        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 12px' }}>
+                          <div style={{ fontSize: 10.5, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            💡 Area of Improvement:
+                          </div>
+                          <div style={{ fontSize: 11.5, color: '#14532d', lineHeight: 1.5 }}>
+                            {critique.areas_of_improvement}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               {/* Quoted Verbatim Evidence */}
               {commEval.evidence_quote && (
@@ -928,8 +1086,42 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
                 </div>
               )}
 
+              {/* Email STAR Framework Breakdown Card */}
+              <div style={{ background: '#f8fafc', border: '1.5px solid #bae6fd', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Mail size={14} color="#0284c7" /> Written Proposal STAR Competency Framework Evaluation:
+                  </span>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#0369a1', background: '#e0f2fe', padding: '2px 8px', borderRadius: 12 }}>
+                    Segment 4 Written Business Email
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 10 }}>
+                  {[
+                    { label: 'Situation', data: emailStarEvaluation.situation },
+                    { label: 'Task', data: emailStarEvaluation.task },
+                    { label: 'Action', data: emailStarEvaluation.action },
+                    { label: 'Result', data: emailStarEvaluation.result },
+                  ].map((st) => (
+                    <div key={st.label} style={{ background: '#ffffff', border: `1.5px solid ${st.data?.detected ? '#86efac' : '#fca5a5'}`, borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>{st.label}</div>
+                      <div style={{ fontSize: 11.5, fontWeight: 800, color: st.data?.detected ? '#16a34a' : '#dc2626', marginTop: 2 }}>
+                        {st.data?.detected ? '✓ Provided' : '✗ Missing'}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#64748b', marginTop: 4, lineHeight: 1.3 }}>
+                        {st.data?.summary || ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11.5, color: '#475569', lineHeight: 1.5, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '8px 12px' }}>
+                  <strong style={{ color: '#0f172a' }}>Written Email STAR Assessment: </strong>
+                  {emailStarEvaluation.narrative || "Candidate structured email proposal with clear situation and aspirations."}
+                </div>
+              </div>
+
               {/* AI Evaluation Reason & Feedback */}
-              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 16px' }}>
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#166534', marginBottom: 6 }}>
                   Corporate Written Communication Critique:
                 </div>
@@ -943,6 +1135,50 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
                     ))}
                   </ul>
                 )}
+              </div>
+
+              {/* Structured Email Critique: What was Wrong, Why it Matters, Areas of Improvement */}
+              <div style={{ background: '#ffffff', border: '1.5px solid #cbd5e1', borderRadius: 12, padding: '16px 18px' }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AlertCircle size={16} color="#0284c7" /> Detailed Business Email Critique &amp; Improvement Analysis:
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {emailCritiqueList.map((critique: any, cIdx: number) => (
+                    <div key={cIdx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 12 }}>
+                        {/* What was wrong */}
+                        <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 8, padding: '10px 12px' }}>
+                          <div style={{ fontSize: 10.5, fontWeight: 800, color: '#e11d48', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            ❌ What was Wrong:
+                          </div>
+                          <div style={{ fontSize: 11.5, color: '#881337', lineHeight: 1.5 }}>
+                            {critique.what_was_wrong}
+                          </div>
+                        </div>
+
+                        {/* Why it matters */}
+                        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px' }}>
+                          <div style={{ fontSize: 10.5, fontWeight: 800, color: '#d97706', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            ⚠️ Why it Matters:
+                          </div>
+                          <div style={{ fontSize: 11.5, color: '#78350f', lineHeight: 1.5 }}>
+                            {critique.why_it_matters}
+                          </div>
+                        </div>
+
+                        {/* Areas of improvement */}
+                        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 12px' }}>
+                          <div style={{ fontSize: 10.5, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            💡 Area of Improvement:
+                          </div>
+                          <div style={{ fontSize: 11.5, color: '#14532d', lineHeight: 1.5 }}>
+                            {critique.areas_of_improvement}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </SectionCard>
         </div>
@@ -1027,8 +1263,8 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
                   <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Compass size={18} color="#0284c7" /> Longevity & Team Survival Forecast
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#0369a1', background: '#e0f2fe', padding: '4px 12px', borderRadius: 16 }}>
-                    Trajectory: Stable corporate survival trajectory with regular mentoring
+                  <span style={{ fontSize: 12, fontWeight: 700, color: survIndex >= 80 ? '#15803d' : (survIndex >= 65 ? '#0369a1' : '#b45309'), background: survIndex >= 80 ? '#dcfce7' : (survIndex >= 65 ? '#e0f2fe' : '#fef3c7'), padding: '4px 12px', borderRadius: 16 }}>
+                    Trajectory: {survIndex >= 80 ? 'High-Velocity Corporate Contributor' : (survIndex >= 65 ? 'Stable Corporate Contributor' : 'Targeted Mentoring & Pacing Required')}
                   </span>
                 </div>
 
