@@ -9,7 +9,7 @@ import { useProctoring } from "./hooks/useProctoring";
 import { uploadRecording, getLambdaPresignedUrl, putToPresignedUrl } from "./services/interviewService";
 import { useEdgeTTS } from "./hooks/useEdgeTTS";
 import { useMediaPipe } from "@/lib/useMediaPipe";
-import { Mail, Send, Lock, AlertCircle, Mic, Volume2, Edit3, Check, Sparkles, Activity, ShieldAlert, CheckCircle2, Loader2, UploadCloud, FileText, Square } from "lucide-react";
+import { Mail, Send, Lock, AlertCircle, Mic, Volume2, Edit3, Check, Sparkles, Activity, ShieldAlert, CheckCircle2, Loader2, UploadCloud, FileText, Square, RotateCcw } from "lucide-react";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type SegmentType = "oral" | "cognitive" | "psychometric" | "email";
@@ -287,6 +287,7 @@ async function submitSegment(sessionId: string, segmentId: string, data: any) {
 function OralSegment({
   segmentNumber,
   segment,
+  candidateFirstName,
   videoRef,
   streamRef,
   speak,
@@ -295,6 +296,7 @@ function OralSegment({
 }: {
   segmentNumber: number;
   segment: Segment;
+  candidateFirstName?: string;
   videoRef: React.RefObject<HTMLVideoElement>;
   streamRef: React.MutableRefObject<MediaStream | null>;
   speak?: (text: string) => Promise<void> | void;
@@ -305,10 +307,21 @@ function OralSegment({
   const [submitting, setSubmitting] = useState(false);
   const [finalTranscript, setFinalTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
-  const [isEditing, setIsEditing] = useState(false);
-  const [editText, setEditText] = useState("");
   const [audioLevel, setAudioLevel] = useState(0);
   const [elapsedSecs, setElapsedSecs] = useState(0);
+
+  const displayPrompt = (() => {
+    if (!segment.prompt) return "";
+    let name = (candidateFirstName && candidateFirstName !== "Candidate") ? candidateFirstName : "";
+    if (!name && typeof window !== "undefined") {
+      const stored = sessionStorage.getItem("candidate_name") || sessionStorage.getItem("candidate_display_name") || localStorage.getItem("candidate_name") || "";
+      if (stored) {
+        name = stored.trim().split(/\s+/)[0];
+      }
+    }
+    if (!name) name = "Candidate";
+    return segment.prompt.replace(/\bCandidate\b/g, name);
+  })();
 
   const hasSpokenRef = useRef(false);
   const recognitionRef = useRef<any>(null);
@@ -491,11 +504,11 @@ function OralSegment({
 
   // Read prompt aloud once on mount — FIX-A: gate isTtsSpeakingRef around playback
   useEffect(() => {
-    if (speak && segment.prompt && !hasSpokenRef.current) {
+    if (speak && displayPrompt && !hasSpokenRef.current) {
       hasSpokenRef.current = true;
       // Mark TTS as active before speaking so SpeechRecognition won't restart
       isTtsSpeakingRef.current = true;
-      const res = speak(segment.prompt);
+      const res = speak(displayPrompt);
       const onDone = () => {
         // TTS finished — safe to allow recognition restarts now
         isTtsSpeakingRef.current = false;
@@ -514,7 +527,7 @@ function OralSegment({
     return () => {
       if (stopSpeaking) stopSpeaking();
     };
-  }, [speak, stopSpeaking, segment.prompt]);
+  }, [speak, stopSpeaking, displayPrompt]);
 
 
   // Recording timer
@@ -541,7 +554,6 @@ function OralSegment({
   const handleStart = () => {
     isRecordingRef.current = true;
     setRecording(true);
-    setIsEditing(false);
     if (recognitionRef.current) {
       try {
         recognitionRef.current.start();
@@ -551,7 +563,7 @@ function OralSegment({
     }
   };
 
-  // Stop recording and let candidate review / edit transcript before submitting
+  // Stop recording and let candidate review read-only transcript before submitting or re-recording
   const handleStopRecording = () => {
     isRecordingRef.current = false;
     setRecording(false);
@@ -559,12 +571,24 @@ function OralSegment({
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
     }
-    // Sync current transcript into editText so candidate can edit right away if desired
-    const combined = (finalTextRef.current + (interimTextRef.current ? " " + interimTextRef.current : "")).trim();
-    setEditText(combined);
   };
 
-  // Final confirmation to submit the verified transcript to Segment 2
+  // Allow candidate to re-record Segment 1 from scratch
+  const handleReRecord = () => {
+    isRecordingRef.current = false;
+    setRecording(false);
+    setFinalTranscript("");
+    setInterimTranscript("");
+    finalTextRef.current = "";
+    interimTextRef.current = "";
+    setElapsedSecs(0);
+    if (stopSpeaking) stopSpeaking();
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch {}
+    }
+  };
+
+  // Final confirmation to submit the authentic speech transcript to Segment 2
   const handleConfirmSubmit = () => {
     setSubmitting(true);
     if (stopSpeaking) stopSpeaking();
@@ -572,9 +596,7 @@ function OralSegment({
       try { recognitionRef.current.stop(); } catch {}
     }
 
-    const combined = isEditing
-      ? editText.trim()
-      : (finalTextRef.current + (interimTextRef.current ? " " + interimTextRef.current : "")).trim();
+    const combined = (finalTextRef.current + (interimTextRef.current ? " " + interimTextRef.current : "")).trim();
 
     onComplete({
       type: "oral_submission",
@@ -583,10 +605,7 @@ function OralSegment({
     });
   };
 
-
-  const combinedText = isEditing 
-    ? editText 
-    : (finalTranscript + (interimTranscript ? " " + interimTranscript : "")).trim();
+  const combinedText = (finalTranscript + (interimTranscript ? " " + interimTranscript : "")).trim();
   const wordCount = combinedText ? combinedText.split(/\s+/).filter(Boolean).length : 0;
 
   return (
@@ -621,11 +640,11 @@ function OralSegment({
                 <Sparkles size={14} className="text-teal-600" />
                 Interviewer Question &amp; Prompt
               </span>
-              {speak && segment.prompt && (
+              {speak && displayPrompt && (
                 <button
                   type="button"
-                  onClick={() => speak(segment.prompt || "")}
-                  className="text-xs text-teal-700 hover:text-teal-900 font-medium flex items-center gap-1 px-2.5 py-1 rounded bg-teal-100/70 hover:bg-teal-100 transition-colors"
+                  onClick={() => speak(displayPrompt)}
+                  className="text-xs text-teal-700 hover:text-teal-900 font-medium flex items-center gap-1 px-2.5 py-1 rounded bg-teal-100/70 hover:bg-teal-100 transition-colors cursor-pointer"
                   title="Replay question audio"
                 >
                   <Volume2 size={13} />
@@ -634,7 +653,7 @@ function OralSegment({
               )}
             </div>
             <p className="text-sm sm:text-base font-semibold text-slate-800 leading-relaxed">
-              {segment.prompt}
+              {displayPrompt}
             </p>
           </div>
 
@@ -674,63 +693,48 @@ function OralSegment({
             )}
           </div>
 
-          {/* Action Controls Card */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-xs text-slate-500 text-center sm:text-left">
+          {/* Action Controls Card - Responsive structured layout without overflowing */}
+          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3">
+            <div className="text-xs text-slate-500">
               <p className="font-semibold text-slate-700">
                 {recording
                   ? "Speaking in progress..."
                   : (finalTranscript || interimTranscript)
-                  ? "Recording paused: Review or edit your speech transcript before submitting"
+                  ? "Response recorded: Review your transcript before submitting"
                   : "Ready to begin your response?"}
               </p>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-400 mt-0.5">
                 {recording
-                  ? "Live speech is captured on the right. When finished speaking, click 'Finish & Review Transcript'."
+                  ? "Live speech is captured on the right console. When finished speaking, click 'Finish Recording'."
                   : (finalTranscript || interimTranscript)
-                  ? "You can edit any misheard words directly, resume speaking, or confirm and proceed to Segment 2."
-                  : "Click below to start recording. You can review and refine your transcript anytime before submitting."}
+                  ? "Review your speech transcript on the right. You can re-record if needed, or confirm and proceed to Segment 2."
+                  : "Click 'Start Recording' to begin speaking. Your spoken words are transcribed automatically in real-time."}
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
               {recording ? (
                 <button
                   type="button"
                   onClick={handleStopRecording}
                   disabled={submitting}
-                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg shadow-sm shadow-amber-600/20 hover:shadow-md transition-all flex items-center gap-2 text-sm cursor-pointer"
+                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg shadow-sm shadow-amber-600/20 hover:shadow-md transition-all flex items-center gap-2 text-sm cursor-pointer ml-auto"
                 >
                   <Square size={15} className="fill-white" />
-                  <span>Finish &amp; Review Transcript</span>
+                  <span>Finish Recording</span>
                 </button>
               ) : (finalTranscript || interimTranscript) ? (
                 <>
                   <button
                     type="button"
-                    onClick={handleStart}
+                    onClick={handleReRecord}
                     disabled={submitting}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition-all flex items-center gap-1.5 text-xs cursor-pointer"
-                    title="Resume recording to add more words"
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition-all flex items-center gap-1.5 text-xs cursor-pointer"
+                    title="Clear previous speech and record response again"
                   >
-                    <Mic size={14} className="text-slate-600" />
-                    <span>Resume Speaking</span>
+                    <RotateCcw size={14} className="text-slate-600" />
+                    <span>Re-record Response</span>
                   </button>
-
-                  {!isEditing && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditText(combinedText);
-                        setIsEditing(true);
-                      }}
-                      disabled={submitting}
-                      className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg border border-indigo-200 transition-all flex items-center gap-1.5 text-xs cursor-pointer"
-                    >
-                      <Edit3 size={14} />
-                      <span>Edit Misheard Words</span>
-                    </button>
-                  )}
 
                   <button
                     type="button"
@@ -756,7 +760,7 @@ function OralSegment({
                   type="button"
                   onClick={handleStart}
                   disabled={submitting}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm shadow-indigo-600/20 hover:shadow-md transition-all flex items-center gap-2 text-sm cursor-pointer"
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm shadow-indigo-600/20 hover:shadow-md transition-all flex items-center gap-2 text-sm cursor-pointer ml-auto"
                 >
                   <Mic size={16} />
                   <span>Start Recording</span>
@@ -790,7 +794,7 @@ function OralSegment({
             </div>
           </div>
 
-          {/* Soundwave / Audio Equalizer Bar (Instant Zero-Lag visual confirmation) */}
+          {/* Soundwave / Audio Equalizer Bar */}
           {recording && (
             <div className="px-4 py-2 bg-indigo-50/40 border-b border-indigo-100 flex items-center justify-between text-xs text-indigo-700">
               <div className="flex items-center gap-1.5">
@@ -811,70 +815,33 @@ function OralSegment({
             </div>
           )}
 
-          {/* Transcript Body */}
+          {/* Transcript Body - Read-Only View */}
           <div className="p-4 flex-1 flex flex-col">
-            {isEditing ? (
-              <div className="space-y-3 flex-1 flex flex-col">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-slate-600">Manual Transcript Editor</span>
-                  <span className="text-[10px] text-slate-400">Review &amp; correct before submit</span>
-                </div>
-                <textarea
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  className="w-full flex-1 min-h-[260px] max-h-[400px] p-3 text-xs text-slate-800 leading-relaxed font-sans bg-slate-50 rounded-lg border border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none"
-                  placeholder="Edit your speech transcript here..."
-                  autoFocus
-                />
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      finalTextRef.current = editText;
-                      setFinalTranscript(editText);
-                      setInterimTranscript("");
-                      setIsEditing(false);
-                    }}
-                    className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-md transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    <Check size={13} /> Save Changes
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditing(false)}
-                    className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-md transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div
-                ref={transcriptScrollRef}
-                className="w-full flex-1 min-h-[260px] max-h-[380px] overflow-y-auto p-3.5 bg-slate-50/70 rounded-lg border border-slate-200 text-xs leading-relaxed font-sans scroll-smooth"
-              >
-                {finalTranscript || interimTranscript ? (
-                  <p className="text-slate-800">
-                    <span className="font-normal">{finalTranscript}</span>
-                    {interimTranscript && (
-                      <span className="text-indigo-600 font-medium italic animate-pulse ml-1">
-                        {interimTranscript}
-                      </span>
-                    )}
+            <div
+              ref={transcriptScrollRef}
+              className="w-full flex-1 min-h-[280px] max-h-[400px] overflow-y-auto p-3.5 bg-slate-50/70 rounded-lg border border-slate-200 text-xs leading-relaxed font-sans scroll-smooth"
+            >
+              {finalTranscript || interimTranscript ? (
+                <p className="text-slate-800">
+                  <span className="font-normal">{finalTranscript}</span>
+                  {interimTranscript && (
+                    <span className="text-indigo-600 font-medium italic animate-pulse ml-1">
+                      {interimTranscript}
+                    </span>
+                  )}
+                </p>
+              ) : (
+                <div className="h-full min-h-[220px] flex flex-col items-center justify-center text-center p-6 text-slate-400 gap-2">
+                  <Mic size={24} className="text-slate-300" />
+                  <p className="text-xs font-medium">
+                    {recording ? "Listening... start speaking your response" : "Click 'Start Recording' to begin speaking"}
                   </p>
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400 gap-2">
-                    <Mic size={24} className="text-slate-300" />
-                    <p className="text-xs font-medium">
-                      {recording ? "Listening... start speaking your response" : "Click 'Start Recording' to begin speaking"}
-                    </p>
-                    <p className="text-[11px] text-slate-400 max-w-xs">
-                      Words are transcribed instantaneously in real-time as you speak.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
+                  <p className="text-[11px] text-slate-400 max-w-xs">
+                    Words are transcribed instantaneously in real-time as you speak.
+                  </p>
+                </div>
+              )}
+            </div>
 
             {/* Transcript Footer & Telemetry */}
             <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
@@ -887,19 +854,9 @@ function OralSegment({
                   Time: <strong className="text-slate-700 font-semibold">{Math.floor(elapsedSecs / 60)}:{(elapsedSecs % 60).toString().padStart(2, "0")}</strong>
                 </span>
               </div>
-
-              {!isEditing && (finalTranscript || interimTranscript) && !recording && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditText(combinedText);
-                    setIsEditing(true);
-                  }}
-                  className="text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 hover:underline cursor-pointer"
-                >
-                  <Edit3 size={12} /> Edit
-                </button>
-              )}
+              <span className="text-[10px] text-slate-400 italic">
+                Objective speech transcript
+              </span>
             </div>
           </div>
         </div>
@@ -1880,6 +1837,7 @@ export default function UnifiedInterviewRoomPage() {
           <OralSegment
             segmentNumber={1}
             segment={segments[0]}
+            candidateFirstName={candidateFirstName}
             videoRef={videoRef}
             streamRef={streamRef}
             speak={speak}

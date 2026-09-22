@@ -28,7 +28,7 @@ _jwks_client = PyJWKClient(
 
 def decode_teams_token(token: str) -> dict:
     """Decode and validate a Microsoft Teams SSO JWT token"""
-    # SECURITY: dev-token bypass is allowed in development environment or when Azure SSO is unconfigured.
+    # SECURITY: dev-token or invite token bypass allowed in non-production or for scheduled candidate links
     if (settings.APP_ENV == "development" or not settings.AZURE_CLIENT_ID or settings.AZURE_CLIENT_ID.startswith("0000")) and (token.startswith("dev-token") or token == "dev-token"):
         email = "ajay.shankar@hcltech.com"
         name = "Ajay Shankar"
@@ -53,6 +53,20 @@ def decode_teams_token(token: str) -> dict:
             "name": name,
             "email": email,
             "roles": [role],
+        }
+
+    # If token is a raw string without standard JWT dots, treat as candidate access token
+    if "." not in token:
+        import hashlib
+        h = hashlib.md5(token.encode("utf-8")).hexdigest()
+        token_oid = f"{h[0:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
+        return {
+            "oid": token_oid,
+            "upn": f"candidate_{h[:8]}@hcltech.com",
+            "name": "Candidate",
+            "email": f"candidate_{h[:8]}@hcltech.com",
+            "roles": ["candidate"],
+            "raw_token": token,
         }
 
     try:
@@ -139,6 +153,25 @@ async def get_current_candidate(
 
     result = await db.execute(select(Candidate).where(Candidate.azure_oid == azure_oid))
     candidate = result.scalar_one_or_none()
+
+    # If raw_token present from invite link, try matching candidate from session notes
+    raw_token = payload.get("raw_token")
+    if not candidate and raw_token:
+        try:
+            sess_res = await db.execute(
+                select(InterviewSession, Candidate)
+                .join(Candidate, InterviewSession.candidate_id == Candidate.id)
+                .where(InterviewSession.notes.like(f"%{raw_token}%"))
+            )
+            sess_row = sess_res.first()
+            if sess_row:
+                candidate = sess_row[1]
+                if candidate:
+                    candidate.azure_oid = azure_oid
+                    await db.commit()
+                    await db.refresh(candidate)
+        except Exception:
+            pass
 
     if not candidate:
         # Fallback: check if candidate already exists by email (e.g. registered by HR first)
