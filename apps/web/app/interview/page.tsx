@@ -1552,16 +1552,36 @@ export default function UnifiedInterviewRoomPage() {
   const handleSegmentSubmit = async (segmentId: string, nextPhase: InterviewPhase, data: any) => {
     stopSpeaking();
     data.violations = proctoring.violationLogRef.current;
+
+    // Cache oral and email data locally in sessionStorage so they are never lost
+    if (typeof window !== "undefined") {
+      if (data.type === "oral_submission" && data.transcript) {
+        sessionStorage.setItem("interview_transcript_seg1", data.transcript);
+      }
+      if (data.type === "email_submission") {
+        sessionStorage.setItem("interview_email_seg4", JSON.stringify({
+          to: data.to,
+          cc: data.cc,
+          subject: data.subject,
+          body: data.body,
+        }));
+      }
+    }
     
     // Instantaneous transition between segments (0ms lag!)
     if (nextPhase !== "completed") {
       setPhase(nextPhase);
+      submitSegment(activeSessionId, segmentId, data).catch((err) => {
+        console.warn("Background segment submission warning:", err);
+      });
+    } else {
+      // For final segment, await the database commit so email is recorded before PDF generation
+      try {
+        await submitSegment(activeSessionId, segmentId, data);
+      } catch (err) {
+        console.warn("Final segment submission warning:", err);
+      }
     }
-    
-    // Asynchronous background submission so network doesn't freeze the UI
-    submitSegment(activeSessionId, segmentId, data).catch((err) => {
-      console.warn("Background segment submission warning:", err);
-    });
     
     if (nextPhase === "completed") {
       setIsUploading(true);
@@ -1590,6 +1610,21 @@ export default function UnifiedInterviewRoomPage() {
         // Step 3: Compiling HR dossier & generating executive PDF report
         setUploadStep(3);
         try {
+          const cachedOral = (typeof window !== "undefined" && sessionStorage.getItem("interview_transcript_seg1")) || "";
+          const transcriptPayload: any[] = [];
+          if (cachedOral) {
+            transcriptPayload.push({
+              speaker: "aria",
+              text: "Could you start by telling us about yourself, your journey so far, and the core technologies you're most passionate about?",
+              question_type: "oral_intro"
+            });
+            transcriptPayload.push({
+              speaker: "candidate",
+              text: cachedOral,
+              question_type: "oral_intro"
+            });
+          }
+
           const pdfRes = await fetch(`${API}/api/reports/${activeSessionId}/generate-pdf?template_id=1`, {
             method: "POST",
             headers: {
@@ -1602,7 +1637,7 @@ export default function UnifiedInterviewRoomPage() {
               sap_id: cSap,
               interviewed_at: new Date().toISOString(),
               s3_video_url: videoUrl,
-              transcript: [],
+              transcript: transcriptPayload,
               behavioral_summary: {
                 eye_contact_avg: 82,
                 adaptability_score: 80,

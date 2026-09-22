@@ -18,7 +18,7 @@ from app.models.models import (
     InterviewReport, InterviewSession, Candidate, AnalysisResult,
     SessionCognitiveQuestion, CognitiveQuestion,
     SessionPsychometricQuestion, PsychometricQuestion,
-    SessionQuestion, CandidateResponse,
+    SessionQuestion, CandidateResponse, QuestionType,
 )
 from app.services.storage_service import get_signed_recording_url
 from app.services.gemini_service import (
@@ -194,6 +194,11 @@ async def get_session_report(
                             candidate_oral_transcript = cr.transcript_text.strip()
 
             pq_json = analysis.per_question_analysis_json or {} if analysis else {}
+            if not candidate_oral_transcript and pq_json.get("oral_transcripts"):
+                candidate_oral_transcript = pq_json["oral_transcripts"].get("seg1") or pq_json["oral_transcripts"].get("oral") or ""
+            if not candidate_oral_transcript and analysis and analysis.summary_text:
+                parsed_oral = _parse_oral_transcripts(analysis.summary_text, pq_json)
+                candidate_oral_transcript = parsed_oral.get("seg1") or parsed_oral.get("oral") or ""
 
             # Fetch cognitive answers directly from the junction table
             cognitive_results = []
@@ -363,6 +368,8 @@ async def get_session_report(
             c_psy = float(analysis.psychometric_score or 80.0) if analysis else 80.0
             c_email = float(email_score or 80.0)
 
+            oral_transcripts = _parse_oral_transcripts(analysis.summary_text if analysis else "", pq_json, candidate_oral_transcript)
+
             # Generate dynamic survival evaluation grounded in actual segment scores
             surv_eval = generate_dynamic_corporate_survival(
                 c_comm=c_comm,
@@ -381,8 +388,8 @@ async def get_session_report(
                 c_email=c_email,
                 candidate_oral_transcript=oral_transcripts.get("seg1") or oral_transcripts.get("oral") or "",
                 email_sub=email_sub,
-                cognitive_results=raw_cog_list,
-                psychometric_results=raw_psy_list
+                cognitive_results=cognitive_results,
+                psychometric_results=psychometric_results
             )
 
             # Year-over-Year progress calculation
