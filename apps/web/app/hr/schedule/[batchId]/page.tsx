@@ -33,6 +33,8 @@ interface SessionRow {
   candidate_name: string;
   candidate_email: string;
   sap_id: string | null;
+  doj?: string | null;
+  module?: string | null;
   status: string;
   started_at: string | null;
   ended_at: string | null;
@@ -310,7 +312,7 @@ export default function BatchDetailPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1.5px solid #e8edf3' }}>
-                      {['#', 'Candidate', 'SAP ID', 'Email', 'Status', 'Started', 'Completed', 'Email Sent', 'Action'].map(h => (
+                      {['#', 'Candidate', 'SAP ID', 'Email', 'DOJ', 'Module', 'Status', 'Started', 'Completed', 'Email Sent', 'Action'].map(h => (
                         <th key={h} style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748b', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#f8fafc', whiteSpace: 'nowrap' }}>
                           {h}
                         </th>
@@ -336,16 +338,22 @@ export default function BatchDetailPage() {
                           </td>
                           <td style={{ padding: '10px 14px', fontSize: 12, color: '#64748b', fontFamily: 'monospace' }}>{s.sap_id || '—'}</td>
                           <td style={{ padding: '10px 14px', fontSize: 12, color: '#64748b' }}>{s.candidate_email}</td>
+                          <td style={{ padding: '10px 14px', fontSize: 12, color: '#475569', whiteSpace: 'nowrap' }}>{s.doj || '—'}</td>
+                          <td style={{ padding: '10px 14px' }}>
+                            <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 6, background: '#eff6ff', color: '#2563eb', fontSize: 11, fontWeight: 700 }}>
+                              {s.module || 'Module 1'}
+                            </span>
+                          </td>
                           <td style={{ padding: '10px 14px' }}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 20, background: cfg.bg, color: cfg.color, fontSize: 11, fontWeight: 700 }}>
                               {cfg.icon} {cfg.label}
                             </span>
                           </td>
-                          <td style={{ padding: '10px 14px', fontSize: 11, color: '#64748b' }}>
-                            {s.started_at ? new Date(s.started_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          <td style={{ padding: '10px 14px', fontSize: 11, color: '#64748b', whiteSpace: 'nowrap' }}>
+                            {s.started_at ? new Date(s.started_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST' : '—'}
                           </td>
-                          <td style={{ padding: '10px 14px', fontSize: 11, color: '#64748b' }}>
-                            {s.ended_at ? new Date(s.ended_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          <td style={{ padding: '10px 14px', fontSize: 11, color: '#64748b', whiteSpace: 'nowrap' }}>
+                            {s.ended_at ? new Date(s.ended_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST' : '—'}
                           </td>
                           <td style={{ padding: '10px 14px', fontSize: 11, color: s.email_sent_at ? '#10b981' : '#ef4444', fontWeight: 600 }}>
                             {s.email_sent_at ? 'Sent' : 'Pending'}
@@ -365,7 +373,7 @@ export default function BatchDetailPage() {
                     })}
                     {filtered.length === 0 && (
                       <tr>
-                        <td colSpan={9} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                        <td colSpan={11} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
                           No candidates match your filter.
                         </td>
                       </tr>

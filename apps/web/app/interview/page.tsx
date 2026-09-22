@@ -50,8 +50,24 @@ function getToken() {
 
 async function fetchRealSession() {
   try {
-    const res = await fetch(`${API}/api/interview/session/my`, {
-      headers: { Authorization: `Bearer ${getToken()}` },
+    let urlToken = "";
+    let urlSession = "";
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      urlToken = urlParams.get("token") || "";
+      urlSession = urlParams.get("session") || urlParams.get("session_id") || "";
+      if (urlToken) {
+        sessionStorage.setItem("teams_token", urlToken);
+      }
+    }
+    const authToken = urlToken || getToken();
+    const queryParts: string[] = [];
+    if (urlToken) queryParts.push(`token=${encodeURIComponent(urlToken)}`);
+    if (urlSession) queryParts.push(`session=${encodeURIComponent(urlSession)}`);
+    const queryStr = queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
+
+    const res = await fetch(`${API}/api/interview/session/my${queryStr}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
     });
     if (res.ok) {
       return await res.json();
@@ -1227,6 +1243,7 @@ function EmailSegment({
   segmentNumber,
   segment,
   candidateName,
+  candidateEmail: propEmail,
   videoRef,
   streamRef,
   onComplete,
@@ -1234,6 +1251,7 @@ function EmailSegment({
   segmentNumber: number;
   segment: Segment;
   candidateName?: string;
+  candidateEmail?: string;
   videoRef: React.RefObject<HTMLVideoElement>;
   streamRef: React.MutableRefObject<MediaStream | null>;
   onComplete: (data: any) => void;
@@ -1245,7 +1263,7 @@ function EmailSegment({
   const [submitting, setSubmitting] = useState(false);
   const [validationError, setValidationError] = useState("");
 
-  const candidateEmail = (typeof window !== "undefined" && (sessionStorage.getItem("candidate_email") || localStorage.getItem("candidate_email"))) || "candidate@techbee.in";
+  const candidateEmail = propEmail || (typeof window !== "undefined" && (sessionStorage.getItem("candidate_email") || localStorage.getItem("candidate_email"))) || "candidate@techbee.in";
   const displayName = candidateName || "Candidate";
 
   // Re-attach video stream when component mounts to maintain proctoring continuity
@@ -1551,6 +1569,16 @@ export default function UnifiedInterviewRoomPage() {
 
   const handleBeginSession = () => {
     setPhase("segment_1");
+    if (activeSessionId && activeSessionId !== "mock-session-id") {
+      fetch(`${API}/api/interview/session/start`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`
+        },
+        body: JSON.stringify({ session_id: activeSessionId })
+      }).catch(err => console.warn("Failed to notify session start:", err));
+    }
     if (streamRef.current && !mediaRecorderRef.current) {
       try {
         const recorder = new MediaRecorder(streamRef.current, { mimeType: "video/webm" });
@@ -1883,7 +1911,8 @@ export default function UnifiedInterviewRoomPage() {
           <EmailSegment
             segmentNumber={4}
             segment={segments[3]}
-            candidateName={candidateFirstName}
+            candidateName={candidateFullNameState || candidateFirstName}
+            candidateEmail={candidateEmailState}
             videoRef={videoRef}
             streamRef={streamRef}
             onComplete={(data) => handleSegmentSubmit(segments[3].id, "completed", data)}

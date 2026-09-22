@@ -867,7 +867,15 @@ export default function SchedulePage() {
               batches.map(b => {
                 const pct = batchProgress(b);
                 const dt = b.scheduled_at
-                  ? new Date(b.scheduled_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                  ? new Date(b.scheduled_at).toLocaleDateString('en-IN', {
+                      timeZone: 'Asia/Kolkata',
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                    }) + ' IST'
                   : 'Not scheduled';
                 return (
                   <div key={b.batch_id} style={card}>

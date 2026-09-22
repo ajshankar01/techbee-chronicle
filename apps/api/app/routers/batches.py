@@ -367,7 +367,7 @@ async def create_batch(
 async def list_batches(db: AsyncSession = Depends(get_db)):
     """
     List all batches by scanning sessions that have batch_id in their notes.
-    Returns aggregated stats per batch.
+    Returns aggregated stats per batch with auto-expiration check for no-shows.
     """
     import json
 
@@ -378,6 +378,9 @@ async def list_batches(db: AsyncSession = Depends(get_db)):
     )
     all_sessions = result.scalars().all()
 
+    now_utc = datetime.now(timezone.utc)
+    updated_sessions = False
+
     # Group by batch_id
     batches: dict = {}
     for s in all_sessions:
@@ -386,6 +389,20 @@ async def list_batches(db: AsyncSession = Depends(get_db)):
             bid = meta.get("batch_id")
             if not bid:
                 continue
+
+            # Auto-mark expired pending sessions as abandoned (No-show)
+            exp_str = meta.get("token_expires_at")
+            if s.status == SessionStatus.PENDING and exp_str:
+                try:
+                    exp_dt = datetime.fromisoformat(exp_str)
+                    if exp_dt.tzinfo is None:
+                        exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                    if now_utc > exp_dt:
+                        s.status = SessionStatus.ABANDONED
+                        updated_sessions = True
+                except Exception:
+                    pass
+
             if bid not in batches:
                 batches[bid] = {
                     "batch_id": bid,
@@ -400,11 +417,16 @@ async def list_batches(db: AsyncSession = Depends(get_db)):
                 }
             b = batches[bid]
             b["total"] += 1
-            b[s.status.value if hasattr(s.status, 'value') else str(s.status)] = b.get(
-                s.status.value if hasattr(s.status, 'value') else str(s.status), 0
-            ) + 1
+            st_val = s.status.value if hasattr(s.status, 'value') else str(s.status)
+            b[st_val] = b.get(st_val, 0) + 1
         except Exception:
             continue
+
+    if updated_sessions:
+        try:
+            await db.commit()
+        except Exception:
+            pass
 
     return {"batches": list(batches.values())}
 
@@ -413,7 +435,7 @@ async def list_batches(db: AsyncSession = Depends(get_db)):
 
 @router.get("/batches/{batch_id}")
 async def get_batch_detail(batch_id: str, db: AsyncSession = Depends(get_db)):
-    """Get detailed status of all sessions in a batch."""
+    """Get detailed status of all sessions in a batch with DOJ and module info."""
     import json
 
     result = await db.execute(
@@ -428,6 +450,9 @@ async def get_batch_detail(batch_id: str, db: AsyncSession = Depends(get_db)):
     if not rows:
         raise HTTPException(status_code=404, detail="Batch not found")
 
+    now_utc = datetime.now(timezone.utc)
+    updated_sessions = False
+
     sessions = []
     batch_meta = {}
     for session, candidate in rows:
@@ -435,6 +460,19 @@ async def get_batch_detail(batch_id: str, db: AsyncSession = Depends(get_db)):
             meta = json.loads(session.notes or "{}")
         except Exception:
             meta = {}
+
+        # Auto-mark expired pending session as abandoned (No-show)
+        exp_str = meta.get("token_expires_at")
+        if session.status == SessionStatus.PENDING and exp_str:
+            try:
+                exp_dt = datetime.fromisoformat(exp_str)
+                if exp_dt.tzinfo is None:
+                    exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                if now_utc > exp_dt:
+                    session.status = SessionStatus.ABANDONED
+                    updated_sessions = True
+            except Exception:
+                pass
 
         if not batch_meta:
             batch_meta = {
@@ -444,17 +482,28 @@ async def get_batch_detail(batch_id: str, db: AsyncSession = Depends(get_db)):
                 "expires_at": meta.get("token_expires_at"),
             }
 
+        doj_str = candidate.join_date.strftime("%d %b %Y") if candidate.join_date else "—"
+        effective_mod = session.bond_year or candidate.calculated_bond_year or 1
+
         sessions.append({
             "session_id": str(session.id),
             "candidate_name": candidate.display_name,
             "candidate_email": candidate.email,
             "sap_id": candidate.employee_id,
+            "doj": doj_str,
+            "module": f"Module {effective_mod}",
             "status": session.status.value if hasattr(session.status, 'value') else str(session.status),
             "started_at": session.started_at.isoformat() if session.started_at else None,
             "ended_at": session.ended_at.isoformat() if session.ended_at else None,
             "email_sent_at": meta.get("email_sent_at"),
             "access_token": meta.get("access_token"),
         })
+
+    if updated_sessions:
+        try:
+            await db.commit()
+        except Exception:
+            pass
 
     return {**batch_meta, "sessions": sessions, "total": len(sessions)}
 

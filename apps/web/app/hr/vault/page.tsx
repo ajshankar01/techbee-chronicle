@@ -517,7 +517,7 @@ export default function CandidatesPage() {
                                               >
                                                 <Video size={11} color={isThisVideo ? '#fb923c' : '#94a3b8'} />
                                                 <span style={{ fontFamily: 'monospace', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                                                  {vid.attempt_number ? `Attempt ${vid.attempt_number} • ` : ''}{vid.timestamp}_sess.webm {vid.bond_year ? `(Module ${vid.bond_year})` : ''}
+                                                  {vid.sap_id || cand.sap_id || 'SAP'}_{vid.module || `Module_${vid.bond_year || 1}`}_Attempt{vid.attempt_number || 1}_{vid.timestamp}_{vid.session_id ? vid.session_id.slice(0, 8) : 'sess'}.webm
                                                 </span>
                                               </div>
                                             );
@@ -552,7 +552,7 @@ export default function CandidatesPage() {
                                               >
                                                 <FileText size={11} color={isThisReport ? 'var(--color-brand)' : '#94a3b8'} />
                                                 <span style={{ fontFamily: 'monospace', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                                                  {rep.attempt_number ? `Attempt ${rep.attempt_number} • ` : ''}{rep.timestamp}_report.pdf {rep.bond_year ? `(Module ${rep.bond_year})` : ''}
+                                                  {rep.sap_id || cand.sap_id || 'SAP'}_{rep.module || `Module_${rep.bond_year || 1}`}_Attempt{rep.attempt_number || 1}_{rep.timestamp}_{rep.session_id ? rep.session_id.slice(0, 8) : 'report'}.pdf
                                                 </span>
                                               </div>
                                             );

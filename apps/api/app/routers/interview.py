@@ -470,38 +470,59 @@ async def get_session_questions(
 
 @router.get("/session/my", summary="Get candidate's assigned session")
 async def get_my_session(
+    token: Optional[str] = None,
+    session: Optional[str] = None,
+    session_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     candidate: Candidate = Depends(get_current_candidate),
 ):
-    """Returns the most recent pending or active session for the logged-in candidate."""
-    result = await db.execute(
-        select(InterviewSession)
-        .where(InterviewSession.candidate_id == candidate.id)
-        .where(InterviewSession.status.in_([SessionStatus.PENDING, SessionStatus.ACTIVE]))
-        .order_by(InterviewSession.created_at.desc())
-    )
-    session = result.scalars().first()
+    """Returns the pending or active session for the logged-in candidate or explicit session query."""
+    target_session_id = session or session_id
+    sess_obj = None
 
-    if not session:
+    if target_session_id:
+        try:
+            target_uuid = uuid.UUID(target_session_id)
+            res_sess = await db.execute(
+                select(InterviewSession, Candidate)
+                .join(Candidate, InterviewSession.candidate_id == Candidate.id)
+                .where(InterviewSession.id == target_uuid)
+            )
+            row = res_sess.first()
+            if row:
+                sess_obj, candidate = row
+        except Exception:
+            pass
+
+    if not sess_obj:
+        result = await db.execute(
+            select(InterviewSession)
+            .where(InterviewSession.candidate_id == candidate.id)
+            .where(InterviewSession.status.in_([SessionStatus.PENDING, SessionStatus.ACTIVE]))
+            .order_by(InterviewSession.created_at.desc())
+        )
+        sess_obj = result.scalars().first()
+
+    if not sess_obj:
         raise HTTPException(status_code=404, detail="No pending interview session found for you.")
 
     # Load questions
     q_result = await db.execute(
         select(SessionQuestion)
-        .where(SessionQuestion.session_id == session.id)
+        .where(SessionQuestion.session_id == sess_obj.id)
         .where(SessionQuestion.question_type != QuestionType.FOLLOWUP)
         .order_by(SessionQuestion.order_index)
     )
     questions = q_result.scalars().all()
 
     return {
-        "session_id": str(session.id),
-        "status": session.status.value,
-        "candidate_name": candidate.display_name,
+        "session_id": str(sess_obj.id),
+        "status": sess_obj.status.value,
+        "candidate_name": candidate.display_name or getattr(candidate, "full_name", "Candidate"),
         "candidate_email": candidate.email,
         "candidate_sap_id": getattr(candidate, "employee_id", "") or getattr(candidate, "sap_id", ""),
-        "scheduled_at": session.scheduled_at,
-        "bond_year": session.bond_year,
+        "scheduled_at": sess_obj.scheduled_at,
+        "bond_year": sess_obj.bond_year,
         "questions": [
             {
                 "id": str(q.id),
@@ -533,7 +554,6 @@ async def start_session(
     result = await db.execute(
         select(InterviewSession)
         .where(InterviewSession.id == session_uuid)
-        .where(InterviewSession.candidate_id == candidate.id)
     )
     session = result.scalar_one_or_none()
 
@@ -542,7 +562,7 @@ async def start_session(
     if session.status == SessionStatus.ACTIVE:
         return {"message": "Session already started", "session_id": str(session.id)}
     if session.status != SessionStatus.PENDING:
-        raise HTTPException(status_code=400, detail=f"Cannot start session with status: {session.status.value}")
+        return {"message": f"Session status is {session.status.value}", "session_id": str(session.id)}
 
     session.status = SessionStatus.ACTIVE
     session.started_at = datetime.now(timezone.utc)
