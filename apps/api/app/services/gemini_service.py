@@ -516,11 +516,12 @@ def extract_keyword_explanations(transcript: str = "", detected_keywords: list =
                 break
         
         if context_sentence:
-            explanation = f"Referenced during spoken explanation: '{context_sentence[:100]}...' {known_tech_dictionary.get(kw_lower, f'Articulated as a focal topic in candidate\'s background.')}"
+            default_kw_exp = known_tech_dictionary.get(kw_lower, "Articulated as a focal topic in candidate background.")
+            explanation = f"Referenced during spoken explanation: '{context_sentence[:100]}...' {default_kw_exp}"
         else:
             explanation = known_tech_dictionary.get(
                 kw_lower,
-                f"Referenced directly by the candidate during their spoken response."
+                "Referenced directly by the candidate during their spoken response."
             )
         
         results.append({
