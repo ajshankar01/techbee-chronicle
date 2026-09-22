@@ -329,16 +329,41 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
     (!isEmailText(commEval.evidence_quote) ? commEval.evidence_quote : "") || 
     "No spoken oral transcript recorded for this candidate.";
   
+  // Extract candidate spoken speech sentences dynamically
+  const spokenSentences = spokenTranscriptText && spokenTranscriptText !== "No spoken oral transcript recorded for this candidate."
+    ? spokenTranscriptText.split(/[.!?]+/).map((s: string) => s.trim()).filter((s: string) => s.length > 5)
+    : [];
+
+  const candidateJourneySentence = spokenSentences.find((s: string) => /experience|journey|completed|degree|college|foundation|background|working|years/i.test(s)) 
+    || (spokenSentences.length > 1 ? spokenSentences[1] : spokenTranscriptText);
+    
+  const candidateTechSentence = spokenSentences.find((s: string) => /passionate|technology|technologies|cloud|marketing|sales|ai|core|specializ/i.test(s))
+    || (spokenSentences.length > 2 ? spokenSentences[2] : spokenTranscriptText);
+
   const transcriptBreakdown = {
-    self_introduction: (!isEmailText(commEval.transcript_breakdown?.self_introduction) ? commEval.transcript_breakdown?.self_introduction : "") || spokenTranscriptText,
-    journey_so_far: (!isEmailText(commEval.transcript_breakdown?.journey_so_far) ? commEval.transcript_breakdown?.journey_so_far : "") || "Transitioned from academic foundations into hands-on enterprise software development and problem solving.",
-    core_technologies: (!isEmailText(commEval.transcript_breakdown?.core_technologies) ? commEval.transcript_breakdown?.core_technologies : "") || "Focus on modern web architectures, backend services, API designs, and scalable data systems."
+    self_introduction: (!isEmailText(commEval.transcript_breakdown?.self_introduction) ? commEval.transcript_breakdown?.self_introduction : "") 
+      || (spokenSentences[0] ? `"${spokenSentences[0]}."` : spokenTranscriptText),
+    journey_so_far: (!isEmailText(commEval.transcript_breakdown?.journey_so_far) ? commEval.transcript_breakdown?.journey_so_far : "") 
+      || (candidateJourneySentence ? `"${candidateJourneySentence}."` : "Experience and background articulated during candidate spoken introduction."),
+    core_technologies: (!isEmailText(commEval.transcript_breakdown?.core_technologies) ? commEval.transcript_breakdown?.core_technologies : "") 
+      || (candidateTechSentence ? `"${candidateTechSentence}."` : "Focal technical domains and passions highlighted in candidate spoken response.")
   };
-  const detectedKeywords: string[] = Array.isArray(commEval.detected_keywords) && commEval.detected_keywords.length > 0 
-    ? commEval.detected_keywords 
-    : (spokenTranscriptText && spokenTranscriptText !== "No spoken oral transcript recorded for this candidate."
-        ? spokenTranscriptText.split(/\s+/).filter((w: string) => w.length > 4).slice(0, 4).map((w: string) => w.replace(/[^a-zA-Z]/g, ''))
-        : ["Communication", "Professionalism"]);
+
+  // Keywords Used & Contextual Technical Explanations (Segment 1)
+  // Derive strictly from backend keyword_explanations or spoken speech keywords
+  const keywordExplanations: Array<{ keyword: string; explanation: string }> = 
+    commEval.keyword_explanations && Array.isArray(commEval.keyword_explanations) && commEval.keyword_explanations.length > 0 
+      ? commEval.keyword_explanations 
+      : [];
+
+  const detectedKeywords: string[] = keywordExplanations.length > 0
+    ? keywordExplanations.map((k) => k.keyword)
+    : (Array.isArray(commEval.detected_keywords) && commEval.detected_keywords.length > 0 
+        ? commEval.detected_keywords 
+        : (spokenTranscriptText && spokenTranscriptText !== "No spoken oral transcript recorded for this candidate."
+            ? spokenTranscriptText.split(/\s+/).filter((w: string) => w.length > 4 && !["hello", "myself", "completed", "experience"].includes(w.toLowerCase())).slice(0, 4).map((w: string) => w.replace(/[^a-zA-Z]/g, ''))
+            : ["Communication", "Articulation"]));
+
   const commMetrics = commEval.metrics || {
     cadence_wpm: 135,
     speech_clarity: "High",
@@ -352,7 +377,7 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
     task: { detected: false, summary: "Failed to articulate specific technical constraints and milestone targets." },
     action: { detected: false, summary: "Omitted explicit hands-on technical steps and design decisions." },
     result: { detected: true, summary: "Highlighted project outcome, deployment, and key metrics achieved." },
-    narrative: "Candidate provided Situation & Result, but failed to detail specific Task and Action."
+    narrative: "Candidate articulated technical background with clear Situation and context."
   };
 
   // Structured Oral Communication Critique (Segment 1: What was Wrong, Why it Matters, Areas of Improvement)
@@ -368,15 +393,6 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
       areas_of_improvement: "Anchor the conclusion of every project story with a verifiable metric, such as latency reduction, test coverage percentage, or deployment stability."
     }
   ];
-
-  // Keywords Used & Contextual Technical Explanations (Segment 1)
-  const keywordExplanations: Array<{ keyword: string; explanation: string }> = 
-    commEval.keyword_explanations && Array.isArray(commEval.keyword_explanations) && commEval.keyword_explanations.length > 0 
-      ? commEval.keyword_explanations 
-      : detectedKeywords.map((kw: string) => ({
-          keyword: kw,
-          explanation: `Demonstrated practical software engineering application of ${kw} within candidate technical background and enterprise modules.`
-        }));
 
   // Dedicated Email STAR Evaluation (Segment 4)
   const emailStarEvaluation = emailEval.star_evaluation || {
@@ -1619,23 +1635,49 @@ export default function ReportViewerPage({ params }: { params: { sessionId: stri
                   <SectionCard title={`Segment 3: Psychometric Test Item Responses (${psyList.length || 15} Items)`} icon={<Brain size={18} />} accentColor="#d97706">
                     {psyList.length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {psyList.map((res: any, idx: number) => (
-                    <div key={idx} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ flex: 1, paddingRight: 16 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: '#d97706', textTransform: 'uppercase' }}>Trait: {res.trait}</span>
-                          {res.ideal_response && (
-                            <span style={{ fontSize: 9.5, fontWeight: 600, color: '#64748b', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>Ideal: {res.ideal_response}</span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: 12.5, color: '#1e293b', fontWeight: 500, marginTop: 3 }}>"{res.statement}"</div>
-                      </div>
-                      <div style={{ textAlign: 'center', minWidth: 60, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '6px' }}>
-                        <div style={{ fontSize: 16, fontWeight: 900, color: '#b45309' }}>{res.selected_score}/5</div>
-                        <div style={{ fontSize: 9, color: '#92400e' }}>Likert</div>
-                      </div>
-                    </div>
-                  ))}
+                        {psyList.map((res: any, idx: number) => {
+                          const rawScore = Number(res.selected_score ?? 3);
+                          const isSD = String(res.ideal_response || '').toUpperCase() === 'SD';
+                          // Organizational Alignment:
+                          // If Ideal is SA (Strongly Agree / forward keyed): 4 or 5 is Positive (Green), 1 or 2 is Adverse (Red), 3 is Neutral.
+                          // If Ideal is SD (Strongly Disagree / reverse keyed): 1 or 2 is Positive (Green), 4 or 5 is Adverse (Red), 3 is Neutral.
+                          // Also check effective_score if present: effective_score >= 4 is Positive, <= 2 is Adverse.
+                          const isPositive = res.effective_score !== undefined && res.effective_score !== null
+                            ? res.effective_score >= 4
+                            : (isSD ? rawScore <= 2 : rawScore >= 4);
+
+                          const isNegative = res.effective_score !== undefined && res.effective_score !== null
+                            ? res.effective_score <= 2
+                            : (isSD ? rawScore >= 4 : rawScore <= 2);
+
+                          const statusBg = isPositive ? '#f0fdf4' : (isNegative ? '#fef2f2' : '#ffffff');
+                          const statusBorder = isPositive ? '#86efac' : (isNegative ? '#fca5a5' : '#e2e8f0');
+                          const badgeBg = isPositive ? '#dcfce7' : (isNegative ? '#fee2e2' : '#fffbeb');
+                          const badgeBorder = isPositive ? '#bbf7d0' : (isNegative ? '#fecaca' : '#fde68a');
+                          const badgeColor = isPositive ? '#15803d' : (isNegative ? '#dc2626' : '#b45309');
+                          const verdictLabel = isPositive ? '✓ Positive Alignment' : (isNegative ? '✗ Negative / Risk' : '○ Moderate / Neutral');
+
+                          return (
+                            <div key={idx} style={{ background: statusBg, border: `1.5px solid ${statusBorder}`, borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.15s ease' }}>
+                              <div style={{ flex: 1, paddingRight: 16 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Item #{idx + 1} · Trait: {res.trait}</span>
+                                  {res.ideal_response && (
+                                    <span style={{ fontSize: 9.5, fontWeight: 600, color: '#475569', background: '#e2e8f0', padding: '1px 6px', borderRadius: 4 }}>Ideal: {res.ideal_response}</span>
+                                  )}
+                                  <span style={{ fontSize: 9.5, fontWeight: 700, color: badgeColor, background: badgeBg, border: `1px solid ${badgeBorder}`, padding: '1px 8px', borderRadius: 10 }}>
+                                    {verdictLabel}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: 12.5, color: '#0f172a', fontWeight: 500, marginTop: 4 }}>"{res.statement}"</div>
+                              </div>
+                              <div style={{ textAlign: 'center', minWidth: 70, background: badgeBg, border: `1px solid ${badgeBorder}`, borderRadius: 8, padding: '6px 8px' }}>
+                                <div style={{ fontSize: 16, fontWeight: 900, color: badgeColor }}>{rawScore}/5</div>
+                                <div style={{ fontSize: 9, fontWeight: 700, color: badgeColor, textTransform: 'uppercase' }}>Likert</div>
+                              </div>
+                            </div>
+                          );
+                        })}
                     </div>
                   ) : (
                     <div style={{ fontSize: 12, color: '#64748b', textAlign: 'center', padding: '20px' }}>No raw psychometric items stored.</div>

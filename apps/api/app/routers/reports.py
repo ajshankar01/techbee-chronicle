@@ -331,19 +331,19 @@ async def get_session_report(
 
             # Evaluate STAR framework dynamically using candidate's actual oral transcript & email submission separately
             email_body_text = email_sub.get("body", "") if isinstance(email_sub, dict) else ""
+            
+            # Unconditionally ground oral STAR evaluation in candidate's oral speech (never allow email contamination or static legacy text)
             existing_star = comm_eval.get("star_evaluation")
-            is_legacy_static = (
-                isinstance(existing_star, dict)
-                and existing_star.get("narrative") == "Candidate provided Situation & Result, but failed to detail specific Task and Action."
-            )
-            if not existing_star or is_legacy_static:
+            if not existing_star or not isinstance(existing_star, dict) or existing_star.get("domain") != "oral" or "email" in str(existing_star.get("narrative", "")).lower() or existing_star.get("narrative") == "Candidate provided Situation & Result, but failed to detail specific Task and Action.":
                 comm_eval["star_evaluation"] = evaluate_star_framework(candidate_oral_transcript, domain="oral")
 
             if not comm_eval.get("critique"):
                 comm_eval["critique"] = evaluate_oral_critique(candidate_oral_transcript, comm_eval)
 
-            if not comm_eval.get("keyword_explanations"):
-                comm_eval["keyword_explanations"] = extract_keyword_explanations(candidate_oral_transcript, comm_eval.get("detected_keywords", []))
+            # Always extract dynamic keywords from candidate's actual spoken speech
+            comm_eval["keyword_explanations"] = extract_keyword_explanations(candidate_oral_transcript, comm_eval.get("detected_keywords", []))
+            # Keep detected_keywords strictly aligned with the real keywords extracted from speech
+            comm_eval["detected_keywords"] = [k["keyword"] for k in comm_eval["keyword_explanations"]]
 
             if email_sub:
                 if not email_eval:
@@ -1159,14 +1159,14 @@ async def generate_and_upload_pdf(
             })
 
         pdf_comm_eval = (existing_ar.per_question_analysis_json.get("communication_evaluation") if (existing_ar and existing_ar.per_question_analysis_json) else {}) or (analysis.get("communication_evaluation") if 'analysis' in locals() and analysis else {})
-        if not pdf_comm_eval.get("star_evaluation") or (isinstance(pdf_comm_eval.get("star_evaluation"), dict) and pdf_comm_eval["star_evaluation"].get("narrative") == "Candidate provided Situation & Result, but failed to detail specific Task and Action."):
+        if not pdf_comm_eval.get("star_evaluation") or not isinstance(pdf_comm_eval.get("star_evaluation"), dict) or pdf_comm_eval["star_evaluation"].get("domain") != "oral" or "email" in str(pdf_comm_eval["star_evaluation"].get("narrative", "")).lower() or pdf_comm_eval["star_evaluation"].get("narrative") == "Candidate provided Situation & Result, but failed to detail specific Task and Action.":
             pdf_comm_eval["star_evaluation"] = evaluate_star_framework(oral_txt or cr_transcript_text, domain="oral")
 
         if not pdf_comm_eval.get("critique"):
             pdf_comm_eval["critique"] = evaluate_oral_critique(oral_txt or cr_transcript_text, pdf_comm_eval)
 
-        if not pdf_comm_eval.get("keyword_explanations"):
-            pdf_comm_eval["keyword_explanations"] = extract_keyword_explanations(oral_txt or cr_transcript_text, pdf_comm_eval.get("detected_keywords", []))
+        pdf_comm_eval["keyword_explanations"] = extract_keyword_explanations(oral_txt or cr_transcript_text, pdf_comm_eval.get("detected_keywords", []))
+        pdf_comm_eval["detected_keywords"] = [k["keyword"] for k in pdf_comm_eval["keyword_explanations"]]
 
         if email_sub:
             if not email_eval:

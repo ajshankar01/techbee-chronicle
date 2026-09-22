@@ -575,22 +575,41 @@ async def generate_interview_pdf(report_data: dict, template_id: int = 1) -> byt
         if psy_results:
             elements.append(Paragraph(f"Segment 3 Item Breakdown ({len(psy_results)} Likert Statements):", h3_s))
             psy_detail_rows = [
-                [Paragraph("<b>#</b>", bold_s), Paragraph("<b>Workplace Mindset Statement</b>", bold_s), Paragraph("<b>Trait Domain</b>", bold_s), Paragraph("<b>Candidate Rating</b>", bold_s)]
+                [Paragraph("<b>#</b>", bold_s), Paragraph("<b>Workplace Mindset Statement</b>", bold_s), Paragraph("<b>Trait &amp; Ideal</b>", bold_s), Paragraph("<b>Candidate Rating &amp; Alignment</b>", bold_s)]
             ]
             rating_labels = {1: "Strongly Disagree (1)", 2: "Disagree (2)", 3: "Neutral (3)", 4: "Agree (4)", 5: "Strongly Agree (5)"}
             for idx, item in enumerate(psy_results, 1):
                 stmt_txt = item.get("statement", f"Statement {idx}")
                 trait_lbl = item.get("trait", "General").title()
+                ideal_str = str(item.get("ideal_response", "SA")).upper()
                 raw_sc = item.get("selected_score", 3)
                 rating_str = rating_labels.get(raw_sc, f"Score {raw_sc}")
+                
+                # Check alignment: green for positive, red for adverse, amber for neutral
+                is_sd = ideal_str == "SD"
+                eff_sc = item.get("effective_score")
+                if eff_sc is not None:
+                    is_pos = eff_sc >= 4
+                    is_neg = eff_sc <= 2
+                else:
+                    is_pos = (raw_sc <= 2) if is_sd else (raw_sc >= 4)
+                    is_neg = (raw_sc >= 4) if is_sd else (raw_sc <= 2)
+
+                if is_pos:
+                    rating_html = f"<font color='#16a34a'><b>{rating_str} [✓ Positive]</b></font>"
+                elif is_neg:
+                    rating_html = f"<font color='#dc2626'><b>{rating_str} [✗ Risk]</b></font>"
+                else:
+                    rating_html = f"<font color='#d97706'><b>{rating_str} [○ Neutral]</b></font>"
+
                 psy_detail_rows.append([
                     Paragraph(str(idx), S('p_num', fontSize=7.5)),
                     Paragraph(stmt_txt, S('p_stmt', fontSize=7.5, leading=9.5)),
-                    Paragraph(trait_lbl, S('p_trait', fontSize=7.5)),
-                    Paragraph(f"<b>{rating_str}</b>", S('p_rat', fontSize=7.5))
+                    Paragraph(f"{trait_lbl} ({ideal_str})", S('p_trait', fontSize=7.5)),
+                    Paragraph(rating_html, S('p_rat', fontSize=7.5))
                 ])
 
-            t_psy_detail = Table(psy_detail_rows, colWidths=[20, 315, 100, 100])
+            t_psy_detail = Table(psy_detail_rows, colWidths=[20, 290, 105, 120])
             t_psy_detail.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), SLATE_100),
                 ('GRID', (0, 0), (-1, -1), 0.3, SLATE_200),
