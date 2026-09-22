@@ -65,17 +65,31 @@ def _match_session_ids(s3_id: str, db_id: str) -> bool:
 
 def _parse_video_key(key: str) -> dict | None:
     """
-    Parse email-based S3 video key:
-      candidates/{email}/videos/{YYYYMMDD_HHMMSS}_{session_id[:8]}.webm
-
-    Returns metadata dict or None if key doesn't match.
+    Parse S3 video key. Supports both:
+    1. Standardized: candidates/{email}/videos/{sap_id}_{module}_Attempt{attempt}_{YYYYMMDD_HHMMSS}_{session_id[:8]}.webm
+    2. Legacy:       candidates/{email}/videos/{YYYYMMDD_HHMMSS}_{session_id}.webm
     """
+    # Try standardized format first
     m = re.match(
-        r"candidates/(?P<email>[^/]+)/videos/(?P<ts>\d{8}_\d{6})_(?P<session>[^.]+)\.webm$",
+        r"candidates/(?P<email>[^/]+)/videos/(?P<sap>[^_]+)_(?P<module>[^_]+)_Attempt(?P<attempt>\d+)_(?P<ts>\d{8}_\d{6})_(?P<session>[^.]+)\.webm$",
         key
     )
-    if not m:
-        return None
+    sap_id = ""
+    module_name = ""
+    attempt_num = 1
+
+    if m:
+        sap_id = m.group("sap")
+        module_name = m.group("module")
+        attempt_num = int(m.group("attempt"))
+    else:
+        # Fallback to legacy format
+        m = re.match(
+            r"candidates/(?P<email>[^/]+)/videos/(?P<ts>\d{8}_\d{6})_(?P<session>[^.]+)\.webm$",
+            key
+        )
+        if not m:
+            return None
 
     ts_str = m.group("ts")
     try:
@@ -86,8 +100,13 @@ def _parse_video_key(key: str) -> dict | None:
         ts_display = ts_str
 
     email = m.group("email")
-    # Derive a display name from the email prefix (before @)
     name_from_email = email.split("@")[0].replace(".", " ").replace("_", " ").title()
+
+    bond_year_val = 1
+    if module_name:
+        by_match = re.search(r"\d+", module_name)
+        if by_match:
+            bond_year_val = int(by_match.group(0))
 
     return {
         "email":            email,
@@ -96,22 +115,40 @@ def _parse_video_key(key: str) -> dict | None:
         "timestamp":        ts_str,
         "timestamp_display": ts_display,
         "s3_key":           key,
+        "sap_id":           sap_id if sap_id != "SAPID_UNKNOWN" else "",
+        "module":           module_name,
+        "attempt_number":   attempt_num,
+        "bond_year":        bond_year_val,
     }
 
 
 def _parse_report_key(key: str) -> dict | None:
     """
-    Parse email-based S3 report key:
-      candidates/{email}/reports/{YYYYMMDD_HHMMSS}_{session_id[:8]}.pdf
-
-    Returns metadata dict or None if key doesn't match.
+    Parse S3 report key. Supports both:
+    1. Standardized: candidates/{email}/reports/{sap_id}_{module}_Attempt{attempt}_{YYYYMMDD_HHMMSS}_{session_id[:8]}.pdf
+    2. Legacy:       candidates/{email}/reports/{YYYYMMDD_HHMMSS}_{session_id}.pdf
     """
+    # Try standardized format first
     m = re.match(
-        r"candidates/(?P<email>[^/]+)/reports/(?P<ts>\d{8}_\d{6})_(?P<session>[^.]+)\.pdf$",
+        r"candidates/(?P<email>[^/]+)/reports/(?P<sap>[^_]+)_(?P<module>[^_]+)_Attempt(?P<attempt>\d+)_(?P<ts>\d{8}_\d{6})_(?P<session>[^.]+)\.pdf$",
         key
     )
-    if not m:
-        return None
+    sap_id = ""
+    module_name = ""
+    attempt_num = 1
+
+    if m:
+        sap_id = m.group("sap")
+        module_name = m.group("module")
+        attempt_num = int(m.group("attempt"))
+    else:
+        # Fallback to legacy format
+        m = re.match(
+            r"candidates/(?P<email>[^/]+)/reports/(?P<ts>\d{8}_\d{6})_(?P<session>[^.]+)\.pdf$",
+            key
+        )
+        if not m:
+            return None
 
     ts_str = m.group("ts")
     try:
@@ -124,6 +161,12 @@ def _parse_report_key(key: str) -> dict | None:
     email = m.group("email")
     name_from_email = email.split("@")[0].replace(".", " ").replace("_", " ").title()
 
+    bond_year_val = 1
+    if module_name:
+        by_match = re.search(r"\d+", module_name)
+        if by_match:
+            bond_year_val = int(by_match.group(0))
+
     return {
         "email":            email,
         "candidate_name":   name_from_email,
@@ -131,6 +174,10 @@ def _parse_report_key(key: str) -> dict | None:
         "timestamp":        ts_str,
         "timestamp_display": ts_display,
         "s3_key":           key,
+        "sap_id":           sap_id if sap_id != "SAPID_UNKNOWN" else "",
+        "module":           module_name,
+        "attempt_number":   attempt_num,
+        "bond_year":        bond_year_val,
     }
 
 
@@ -464,11 +511,13 @@ async def list_s3_assets(
         entry["current_bond_year"] = by
         entry["current_module"] = f"Module {by}"
         
-        # Align all videos and reports for this candidate to their dynamic bond year
+        # Align videos and reports for this candidate if not already tagged with specific module
         for v in entry["videos"]:
-            v["bond_year"] = by
+            if not v.get("bond_year"):
+                v["bond_year"] = by
         for r in entry["reports"]:
-            r["bond_year"] = by
+            if not r.get("bond_year"):
+                r["bond_year"] = by
         
         # Sort files chronologically newest first
         entry["videos"].sort(key=lambda x: x["timestamp"], reverse=True)

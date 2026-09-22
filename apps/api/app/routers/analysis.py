@@ -244,10 +244,31 @@ async def _run_analysis_job(session_id: str, db: AsyncSession):
             violations=violations,
         )
 
+        bond_year = session_obj.bond_year or 1
+        module_name = f"Module_{bond_year}"
+        sap_id = candidate.employee_id or ""
+        attempt_number = 1
+        try:
+            from sqlalchemy import func
+            att_res = await db.execute(
+                sql_select(func.count(InterviewSession.id)).where(
+                    InterviewSession.candidate_id == candidate.id,
+                    InterviewSession.bond_year == bond_year,
+                    InterviewSession.created_at <= session_obj.created_at,
+                )
+            )
+            attempt_number = max(1, att_res.scalar() or 1)
+        except Exception:
+            pass
+
         pdf_url = await upload_report_pdf(
             session_id=session_id,
-            candidate_id=candidate_id,
             pdf_bytes=pdf_bytes,
+            candidate_email=candidate_email,
+            candidate_name=candidate_name,
+            sap_id=sap_id,
+            module_name=module_name,
+            attempt_number=attempt_number,
         )
 
         report = InterviewReport(

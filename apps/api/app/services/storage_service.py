@@ -147,21 +147,34 @@ def upsert_candidate_profile(
         logger.warning(f"Failed to upsert candidate profile: {e}")
 
 
+def _clean_str(val: str, fallback: str = "") -> str:
+    """Clean string for safe S3 path usage (letters, digits, underscore, dash, dot)."""
+    s = (val or fallback).strip()
+    return re.sub(r"[^\w.\-+]", "_", s)
+
+
 async def upload_session_recording(
     session_id: str,
     video_bytes: bytes,
     candidate_email: str = "unknown@fresher.in",
     candidate_name: str = "Fresher Candidate",
+    sap_id: str = "",
+    module_name: str = "Module_1",
+    attempt_number: int = 1,
     content_type: str = "video/webm",
 ) -> str:
     """
-    Upload interview video recording to S3.
-    S3 Key: candidates/{email}/videos/{YYYYMMDD_HHMMSS}_{session_id[:8]}.webm
+    Upload interview video recording to S3 using standardized convention:
+    candidates/{email}/videos/{sap_id}_{module_name}_Attempt{attempt}_{YYYYMMDD_HHMMSS}_{session_id[:8]}.webm
     """
     now = datetime.now(timezone.utc)
     timestamp_str = now.strftime("%Y%m%d_%H%M%S")
     email_folder = _email_to_folder(candidate_email)
-    object_key = f"candidates/{email_folder}/videos/{timestamp_str}_{session_id}.webm"
+    clean_sap = _clean_str(sap_id, "SAPID_UNKNOWN")
+    clean_module = _clean_str(module_name, "Module_1")
+    short_session = session_id[:8] if session_id else "session"
+    filename = f"{clean_sap}_{clean_module}_Attempt{attempt_number}_{timestamp_str}_{short_session}.webm"
+    object_key = f"candidates/{email_folder}/videos/{filename}"
 
     def _upload():
         try:
@@ -175,6 +188,9 @@ async def upload_session_recording(
                     "session_id": session_id,
                     "candidate_email": candidate_email,
                     "candidate_name": candidate_name,
+                    "sap_id": sap_id or "",
+                    "module": clean_module,
+                    "attempt_number": str(attempt_number),
                     "uploaded_at": now.isoformat(),
                     "retention_policy": "7_years_compliance",
                 },
@@ -198,7 +214,7 @@ async def upload_session_recording(
             logger.warning(f"S3 upload failed, falling back to local: {e}")
             local_dir = Path("recordings") / email_folder
             local_dir.mkdir(parents=True, exist_ok=True)
-            file_path = local_dir / f"{timestamp_str}_{session_id}.webm"
+            file_path = local_dir / filename
             file_path.write_bytes(video_bytes)
             logger.info(f"💾 Saved locally: {file_path}")
             return str(file_path)
@@ -212,16 +228,23 @@ async def upload_report_pdf(
     pdf_bytes: bytes,
     candidate_email: str = "unknown@fresher.in",
     candidate_name: str = "Fresher Candidate",
+    sap_id: str = "",
+    module_name: str = "Module_1",
+    attempt_number: int = 1,
 ) -> str:
     """
-    Upload PDF evaluation report to S3.
-    S3 Key: candidates/{email}/reports/{YYYYMMDD_HHMMSS}_{session_id[:8]}.pdf
-    Each interview produces a unique timestamped file — no overwriting.
+    Upload PDF evaluation report to S3 using standardized convention:
+    candidates/{email}/reports/{sap_id}_{module_name}_Attempt{attempt}_{YYYYMMDD_HHMMSS}_{session_id[:8]}.pdf
+    Each attempt produces an explicit numbered file — no overwriting.
     """
     now = datetime.now(timezone.utc)
     timestamp_str = now.strftime("%Y%m%d_%H%M%S")
     email_folder = _email_to_folder(candidate_email)
-    object_key = f"candidates/{email_folder}/reports/{timestamp_str}_{session_id}.pdf"
+    clean_sap = _clean_str(sap_id, "SAPID_UNKNOWN")
+    clean_module = _clean_str(module_name, "Module_1")
+    short_session = session_id[:8] if session_id else "session"
+    filename = f"{clean_sap}_{clean_module}_Attempt{attempt_number}_{timestamp_str}_{short_session}.pdf"
+    object_key = f"candidates/{email_folder}/reports/{filename}"
 
     def _upload():
         try:
@@ -235,6 +258,9 @@ async def upload_report_pdf(
                     "session_id": session_id,
                     "candidate_email": candidate_email,
                     "candidate_name": candidate_name,
+                    "sap_id": sap_id or "",
+                    "module": clean_module,
+                    "attempt_number": str(attempt_number),
                     "interviewed_at": now.isoformat(),
                     "report_timestamp": timestamp_str,
                     "retention_policy": "7_years_compliance",
@@ -256,11 +282,10 @@ async def upload_report_pdf(
             logger.info(f"⚡ S3 PDF Report Uploaded & Presigned → {object_key}")
             return s3_url
         except Exception as e:
-
             logger.warning(f"S3 PDF upload failed, falling back to local: {e}")
             local_dir = Path("reports") / email_folder
             local_dir.mkdir(parents=True, exist_ok=True)
-            file_path = local_dir / f"{timestamp_str}_{session_id}.pdf"
+            file_path = local_dir / filename
             file_path.write_bytes(pdf_bytes)
             return str(file_path)
 

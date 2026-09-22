@@ -22,6 +22,9 @@ interface VideoEntry {
   presign_url: string;
   s3_key: string;
   bond_year?: number;
+  sap_id?: string;
+  module?: string;
+  attempt_number?: number;
 }
 
 interface ReportEntry {
@@ -34,6 +37,9 @@ interface ReportEntry {
   presign_url: string;
   s3_key: string;
   bond_year?: number;
+  sap_id?: string;
+  module?: string;
+  attempt_number?: number;
 }
 
 interface S3Candidate {
@@ -511,7 +517,7 @@ export default function CandidatesPage() {
                                               >
                                                 <Video size={11} color={isThisVideo ? '#fb923c' : '#94a3b8'} />
                                                 <span style={{ fontFamily: 'monospace', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                                                  {vid.timestamp}_sess.webm {vid.bond_year ? `(Module ${vid.bond_year})` : ''}
+                                                  {vid.attempt_number ? `Attempt ${vid.attempt_number} • ` : ''}{vid.timestamp}_sess.webm {vid.bond_year ? `(Module ${vid.bond_year})` : ''}
                                                 </span>
                                               </div>
                                             );
@@ -546,7 +552,7 @@ export default function CandidatesPage() {
                                               >
                                                 <FileText size={11} color={isThisReport ? 'var(--color-brand)' : '#94a3b8'} />
                                                 <span style={{ fontFamily: 'monospace', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                                                  {rep.timestamp}_report.pdf {rep.bond_year ? `(Module ${rep.bond_year})` : ''}
+                                                  {rep.attempt_number ? `Attempt ${rep.attempt_number} • ` : ''}{rep.timestamp}_report.pdf {rep.bond_year ? `(Module ${rep.bond_year})` : ''}
                                                 </span>
                                               </div>
                                             );

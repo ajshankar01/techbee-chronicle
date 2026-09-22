@@ -1253,6 +1253,26 @@ async def generate_and_upload_pdf(
         local_api_base = "http://localhost:8000"
         local_serve_url = f"{local_api_base}/api/reports/serve/{safe_session_id}"
 
+        # ── Calculate attempt number for this candidate & module ──────────────
+        attempt_number = 1
+        try:
+            if cand_obj and session_db_obj:
+                attempts_res = await db.execute(
+                    select(func.count(InterviewSession.id))
+                    .where(
+                        InterviewSession.candidate_id == cand_obj.id,
+                        InterviewSession.bond_year == bond_year,
+                        InterviewSession.created_at <= session_db_obj.created_at,
+                    )
+                )
+                cnt = attempts_res.scalar() or 1
+                attempt_number = max(1, cnt)
+        except Exception as att_err:
+            logger.warning(f"Could not calculate attempt number for PDF naming: {att_err}")
+
+        module_name = f"Module_{bond_year}"
+        sap_id_val = cand_sap_id or (cand_obj.employee_id if cand_obj and getattr(cand_obj, 'employee_id', None) else "") or ""
+
         # ── Try S3 upload (best effort) ───────────────────────────────────────
         final_url = local_serve_url  # default to local
         try:
@@ -1261,6 +1281,9 @@ async def generate_and_upload_pdf(
                 pdf_bytes=pdf_bytes,
                 candidate_email=candidate_email,
                 candidate_name=candidate_name,
+                sap_id=sap_id_val,
+                module_name=module_name,
+                attempt_number=attempt_number,
             )
             # Use S3 URL only if it's actually an HTTP URL (not a local path fallback)
             if s3_result and s3_result.startswith("http"):

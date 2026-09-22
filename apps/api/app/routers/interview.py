@@ -1462,34 +1462,50 @@ async def upload_recording(
         base_url = settings.API_BASE_URL  # http://localhost:8000
         local_serve_url = f"{base_url}/api/interview/serve-recording/{safe_session}"
 
-        # Resolve real candidate details from DB if candidate_email was defaulted or empty
-        if not candidate_email or candidate_email in ("unknown@fresher.in", "fresher@techbee.in"):
-            try:
-                import uuid as _uuid
-                from app.core.database import AsyncSessionLocal
-                from app.models.models import InterviewSession, Candidate
-                from sqlalchemy import select
-                async with AsyncSessionLocal() as _db:
-                    try:
-                        _sess_uuid = _uuid.UUID(session_id)
-                    except ValueError:
-                        _sess_uuid = _uuid.uuid5(_uuid.NAMESPACE_DNS, session_id)
-                    _s_res = await _db.execute(
-                        select(InterviewSession, Candidate)
-                        .join(Candidate, InterviewSession.candidate_id == Candidate.id)
-                        .where(InterviewSession.id == _sess_uuid)
+        bond_year = 1
+        attempt_number = 1
+        # Resolve real candidate details and attempt number from DB
+        try:
+            import uuid as _uuid
+            from app.core.database import AsyncSessionLocal
+            from app.models.models import InterviewSession, Candidate
+            from sqlalchemy import select, func
+            async with AsyncSessionLocal() as _db:
+                try:
+                    _sess_uuid = _uuid.UUID(session_id)
+                except ValueError:
+                    _sess_uuid = _uuid.uuid5(_uuid.NAMESPACE_DNS, session_id)
+                _s_res = await _db.execute(
+                    select(InterviewSession, Candidate)
+                    .join(Candidate, InterviewSession.candidate_id == Candidate.id)
+                    .where(InterviewSession.id == _sess_uuid)
+                )
+                _s_row = _s_res.first()
+                if _s_row:
+                    _s_obj, _c_obj = _s_row
+                    if _c_obj.email and (not candidate_email or candidate_email in ("unknown@fresher.in", "fresher@techbee.in")):
+                        candidate_email = _c_obj.email
+                    if _c_obj.full_name and (not candidate_name or candidate_name == "Fresher Candidate"):
+                        candidate_name = _c_obj.full_name
+                    if getattr(_c_obj, "employee_id", None) and not sap_id:
+                        sap_id = _c_obj.employee_id
+                    bond_year = _s_obj.bond_year or 1
+
+                    # Count attempts for this candidate & module up to this session
+                    _attempts_res = await _db.execute(
+                        select(func.count(InterviewSession.id))
+                        .where(
+                            InterviewSession.candidate_id == _c_obj.id,
+                            InterviewSession.bond_year == bond_year,
+                            InterviewSession.created_at <= _s_obj.created_at,
+                        )
                     )
-                    _s_row = _s_res.first()
-                    if _s_row:
-                        _s_obj, _c_obj = _s_row
-                        if _c_obj.email:
-                            candidate_email = _c_obj.email
-                        if _c_obj.full_name:
-                            candidate_name = _c_obj.full_name
-                        if getattr(_c_obj, "employee_id", None):
-                            sap_id = _c_obj.employee_id
-            except Exception as _res_err:
-                _logger.warning(f"Candidate resolution from DB in upload_recording skipped: {_res_err}")
+                    _count = _attempts_res.scalar() or 1
+                    attempt_number = max(1, _count)
+        except Exception as _res_err:
+            _logger.warning(f"Candidate/attempt resolution from DB in upload_recording skipped: {_res_err}")
+
+        module_name = f"Module_{bond_year}"
 
         # ── Step 2: Upload to S3 under candidates/{email}/videos/ ────────────────
         s3_url = local_serve_url  # default to local if S3 fails
@@ -1500,6 +1516,9 @@ async def upload_recording(
                 video_bytes=video_bytes,
                 candidate_email=candidate_email,
                 candidate_name=candidate_name,
+                sap_id=sap_id,
+                module_name=module_name,
+                attempt_number=attempt_number,
                 content_type=file.content_type or "video/webm",
             )
             if s3_url_result and not s3_url_result.startswith("recordings"):
