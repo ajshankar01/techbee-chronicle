@@ -201,6 +201,115 @@ Return ONLY Aria's opening question text without preamble."""
     )
 
 
+def evaluate_star_framework(oral_text: str = "", email_body: str = "") -> dict:
+    """
+    Evaluates candidate verbal and written text against the STAR Competency Framework
+    (Situation, Task, Action, Result) using dynamic linguistic pattern matching and evidence extraction.
+    Ensures that evaluations are 100% grounded in candidate responses and never static.
+    """
+    import re
+    combined = (f"{oral_text} {email_body}").strip()
+    if not combined:
+        return {
+            "situation": { "detected": False, "summary": "No speech or response provided to establish context." },
+            "task": { "detected": False, "summary": "No response provided to articulate tasks or challenges." },
+            "action": { "detected": False, "summary": "No implementation actions or technical steps recorded." },
+            "result": { "detected": False, "summary": "No outcomes or deliverables recorded." },
+            "narrative": "Candidate did not provide verbal or written responses for STAR evaluation."
+        }
+
+    sentences = [s.strip() for s in re.split(r'[.!?\n]+', combined) if len(s.strip()) > 5]
+
+    # Pattern definitions
+    sit_patterns = [
+        r'\b(during|when|in my|at my|project|college|training|background|team|company|client|hcltech|system was|started|situation)\b',
+        r'\b(working on|working with|graduated|journey|semester|batch|course|joined)\b'
+    ]
+    task_patterns = [
+        r'\b(task|tasked|responsible|responsibility|assigned|goal|objective|requirement|needed to|had to|problem statement|challenge was|target|deadline)\b',
+        r'\b(required to|expected to|supposed to|deliverable|deliverables|aimed to)\b'
+    ]
+    act_patterns = [
+        r'\b(i implemented|i built|i designed|i developed|i configured|i created|i wrote|i used|i refactored|i resolved|i handled|i optimized|i coded)\b',
+        r'\b(using|implemented|developed|designed|configured|utilized|integrated|debugged|tested|created|built|automated|api|react|node|python|sql|docker|cloud)\b'
+    ]
+    res_patterns = [
+        r'\b(result|outcome|achieved|deployed|reduced|improved|increased|completed|delivered|successful|awarded|learned|impact|production|passed)\b',
+        r'\b(finally|eventually|which helped|resulting in|led to|success|satisfaction|metrics|percent|%)'
+    ]
+
+    def find_evidence(patterns):
+        matches = []
+        for s in sentences:
+            s_lower = s.lower()
+            for p in patterns:
+                if re.search(p, s_lower):
+                    matches.append(s)
+                    break
+        return matches
+
+    sit_ev = find_evidence(sit_patterns)
+    task_ev = find_evidence(task_patterns)
+    act_ev = find_evidence(act_patterns)
+    res_ev = find_evidence(res_patterns)
+
+    # Detections
+    sit_detected = len(sit_ev) > 0
+    task_detected = len(task_ev) > 0
+    act_detected = len(act_ev) > 0
+    res_detected = len(res_ev) > 0
+
+    # Summaries with genuine candidate phrases
+    if sit_detected:
+        sit_sum = f"Context established: '{sit_ev[0][:80]}...'" if len(sit_ev[0]) > 80 else f"Context established: '{sit_ev[0]}'"
+    else:
+        sit_sum = "Did not articulate explicit background, team context, or problem setting."
+
+    if task_detected:
+        task_sum = f"Task defined: '{task_ev[0][:80]}...'" if len(task_ev[0]) > 80 else f"Task defined: '{task_ev[0]}'"
+    else:
+        task_sum = "Failed to detail specific technical objectives, challenges, or ownership boundaries."
+
+    if act_detected:
+        act_sum = f"Actions detailed: '{act_ev[0][:80]}...'" if len(act_ev[0]) > 80 else f"Actions detailed: '{act_ev[0]}'"
+    else:
+        act_sum = "Omitted explicit hands-on technical steps, tooling decisions, and implementation actions."
+
+    if res_detected:
+        res_sum = f"Outcome shared: '{res_ev[0][:80]}...'" if len(res_ev[0]) > 80 else f"Outcome shared: '{res_ev[0]}'"
+    else:
+        res_sum = "Did not report measurable deliverables, metrics achieved, or final project impact."
+
+    # Dynamic evaluation narrative
+    provided = []
+    missing = []
+    if sit_detected: provided.append("Situation")
+    else: missing.append("Situation")
+    if task_detected: provided.append("Task")
+    else: missing.append("Task")
+    if act_detected: provided.append("Action")
+    else: missing.append("Action")
+    if res_detected: provided.append("Result")
+    else: missing.append("Result")
+
+    if len(provided) == 4:
+        narrative = "Candidate articulated a well-structured technical response fulfilling all 4 pillars of the STAR framework with clear Situation, Task, Action, and Result."
+    elif provided and missing:
+        narrative = f"Candidate provided {', '.join(provided)}, but did not adequately specify {', '.join(missing)}."
+    elif not provided:
+        narrative = "Candidate response lacked structured STAR framework delivery across Situation, Task, Action, and Result."
+    else:
+        narrative = f"Candidate demonstrated {', '.join(provided)} in their response."
+
+    return {
+        "situation": { "detected": sit_detected, "summary": sit_sum },
+        "task": { "detected": task_detected, "summary": task_sum },
+        "action": { "detected": act_detected, "summary": act_sum },
+        "result": { "detected": res_detected, "summary": res_sum },
+        "narrative": narrative
+    }
+
+
 async def analyze_interview_session(
     session_data: dict = None,
     candidate_name: str = "Candidate",
@@ -472,14 +581,8 @@ Return ONLY valid JSON matching this schema:
             parsed = json.loads(clean.strip())
             comm_sc = parsed.get("communication_score", 80)
             comm_eval_parsed = parsed.get("communication_evaluation", {})
-            if "star_evaluation" not in comm_eval_parsed:
-                comm_eval_parsed["star_evaluation"] = {
-                    "situation": { "detected": True, "summary": "Provided initial context and project background." },
-                    "task": { "detected": False, "summary": "Did not define precise engineering challenges and scope." },
-                    "action": { "detected": False, "summary": "Omitted specific technical action steps taken." },
-                    "result": { "detected": True, "summary": "Described outcome and delivered application metrics." },
-                    "narrative": "Candidate provided Situation and Result, but failed to detail specific Task and Action steps."
-                }
+            if "star_evaluation" not in comm_eval_parsed or not comm_eval_parsed["star_evaluation"].get("situation"):
+                comm_eval_parsed["star_evaluation"] = evaluate_star_framework(combined_candidate_text, email_body_text)
 
             email_sc = parsed.get("email_writing_score") or (parsed.get("email_evaluation", {}).get("etiquette_score") if email_submission else 80)
             
@@ -633,13 +736,7 @@ Return ONLY valid JSON matching this schema:
             },
             "improvement_areas": ["Practice articulating technical concepts with structured examples."],
             "scoring_rationale": "Baseline oral communication score awarded for standard cadence and terminology.",
-            "star_evaluation": {
-                "situation": { "detected": True, "summary": "Provided educational background and broad project overview." },
-                "task": { "detected": False, "summary": "Failed to articulate specific technical constraints and task boundaries." },
-                "action": { "detected": False, "summary": "Omitted explicit hands-on development actions taken." },
-                "result": { "detected": True, "summary": "Mentioned outcome and foundational milestones reached." },
-                "narrative": "Candidate provided Situation & Result, but failed to detail specific Task and Action."
-            }
+            "star_evaluation": evaluate_star_framework(combined_candidate_text, email_body_text)
         },
         "overall_score": 75,
         "email_writing_score": 80 if email_submission else None,

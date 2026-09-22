@@ -21,6 +21,7 @@ from app.models.models import (
     SessionQuestion, CandidateResponse,
 )
 from app.services.storage_service import get_signed_recording_url
+from app.services.gemini_service import evaluate_star_framework
 
 logger = logging.getLogger(__name__)
 
@@ -309,18 +310,20 @@ async def get_session_report(
                 "evidence_quote": "Demonstrated technical fluency and structured presentation of technical milestones.",
                 "reasoning": "Candidate articulated their technical background with good pacing and enterprise-appropriate vocabulary."
             }
-            if "star_evaluation" not in comm_eval:
-                comm_eval["star_evaluation"] = {
-                    "situation": { "detected": True, "summary": "Provided initial context and technical project background." },
-                    "task": { "detected": False, "summary": "Failed to articulate specific technical constraints and milestone targets." },
-                    "action": { "detected": False, "summary": "Omitted explicit hands-on technical steps and design decisions." },
-                    "result": { "detected": True, "summary": "Highlighted project outcome, deployment, and key metrics achieved." },
-                    "narrative": "Candidate provided Situation & Result, but failed to detail specific Task and Action."
-                }
-
             email_sub = pq_json.get("email_submission")
             email_eval = pq_json.get("email_evaluation")
             email_score = pq_json.get("email_writing_score") or (email_eval.get("etiquette_score") if email_eval else 85)
+
+            # Evaluate STAR framework dynamically using candidate's actual oral transcript & email submission
+            email_body_text = email_sub.get("body", "") if isinstance(email_sub, dict) else ""
+            existing_star = comm_eval.get("star_evaluation")
+            # If star_evaluation is missing or has the legacy static template text, compute dynamically from candidate text
+            is_legacy_static = (
+                isinstance(existing_star, dict)
+                and existing_star.get("narrative") == "Candidate provided Situation & Result, but failed to detail specific Task and Action."
+            )
+            if not existing_star or is_legacy_static:
+                comm_eval["star_evaluation"] = evaluate_star_framework(candidate_oral_transcript, email_body_text)
             vm_eval = pq_json.get("vision_and_mission_evaluation") or {
                 "score": analysis.vision_and_mission_score or 84,
                 "ambition_rating": "High",
@@ -1194,6 +1197,11 @@ async def generate_and_upload_pdf(
                 "question_type": "oral_intro"
             })
 
+        pdf_comm_eval = (existing_ar.per_question_analysis_json.get("communication_evaluation") if (existing_ar and existing_ar.per_question_analysis_json) else {}) or (analysis.get("communication_evaluation") if 'analysis' in locals() and analysis else {})
+        if not pdf_comm_eval.get("star_evaluation") or (isinstance(pdf_comm_eval.get("star_evaluation"), dict) and pdf_comm_eval["star_evaluation"].get("narrative") == "Candidate provided Situation & Result, but failed to detail specific Task and Action."):
+            pdf_email_body = email_sub.get("body", "") if isinstance(email_sub, dict) else ""
+            pdf_comm_eval["star_evaluation"] = evaluate_star_framework(oral_txt or cr_transcript_text, pdf_email_body)
+
         report_data = {
             "session_id": session_id,
             "candidate": {
@@ -1218,7 +1226,7 @@ async def generate_and_upload_pdf(
                 "psychometric_scores": psy_metrics,
                 "email_submission": email_sub,
                 "email_evaluation": email_eval,
-                "communication_evaluation": (existing_ar.per_question_analysis_json.get("communication_evaluation") if (existing_ar and existing_ar.per_question_analysis_json) else {}) or (analysis.get("communication_evaluation") if 'analysis' in locals() and analysis else {}),
+                "communication_evaluation": pdf_comm_eval,
                 "corporate_survival_evaluation": (existing_ar.per_question_analysis_json.get("corporate_survival_evaluation") if (existing_ar and existing_ar.per_question_analysis_json) else {}) or (analysis.get("corporate_survival_evaluation") if 'analysis' in locals() and analysis else {}),
                 "behavioral": behavioral_scores,
                 "summary_text": summary_text,
