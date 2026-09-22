@@ -708,24 +708,27 @@ async def register_and_resolve(
         )
         candidate = result.scalar_one_or_none()
 
+        # Parse join date if provided
+        join_date = None
+        if entry.doj:
+            doj_str = entry.doj.strip()
+            for fmt in ["%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d", "%m/%d/%Y"]:
+                try:
+                    join_date = datetime.strptime(doj_str, fmt).replace(tzinfo=timezone.utc)
+                    break
+                except ValueError:
+                    continue
+
         if candidate:
             # Update fields if provided
-            if entry.sap_id and not candidate.employee_id:
+            if entry.sap_id and entry.sap_id.strip():
                 candidate.employee_id = entry.sap_id.strip()
-            if entry.name and candidate.display_name == email.split('@')[0].capitalize():
+            if entry.name and entry.name.strip():
                 candidate.display_name = entry.name.strip()
+            if join_date:
+                candidate.join_date = join_date
             already_existed.append(email)
         else:
-            # Parse join date
-            join_date = None
-            if entry.doj:
-                doj_str = entry.doj.strip()
-                for fmt in ["%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d", "%m/%d/%Y"]:
-                    try:
-                        join_date = datetime.strptime(doj_str, fmt).replace(tzinfo=timezone.utc)
-                        break
-                    except ValueError:
-                        continue
 
             import hashlib as _hashlib
             h = _hashlib.md5(email.encode('utf-8')).hexdigest()
