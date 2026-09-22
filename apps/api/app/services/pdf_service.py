@@ -571,6 +571,62 @@ async def generate_interview_pdf(report_data: dict, template_id: int = 1) -> byt
             elements.append(t_cog_detail)
             elements.append(Spacer(1, 10))
 
+        # Item-by-item Psychometric Test Audit Trail
+        if psy_results:
+            elements.append(Paragraph(f"Segment 3 Item Breakdown ({len(psy_results)} Likert Statements):", h3_s))
+            psy_detail_rows = [
+                [Paragraph("<b>#</b>", bold_s), Paragraph("<b>Workplace Mindset Statement</b>", bold_s), Paragraph("<b>Trait Domain</b>", bold_s), Paragraph("<b>Candidate Rating</b>", bold_s)]
+            ]
+            rating_labels = {1: "Strongly Disagree (1)", 2: "Disagree (2)", 3: "Neutral (3)", 4: "Agree (4)", 5: "Strongly Agree (5)"}
+            for idx, item in enumerate(psy_results, 1):
+                stmt_txt = item.get("statement", f"Statement {idx}")
+                trait_lbl = item.get("trait", "General").title()
+                raw_sc = item.get("selected_score", 3)
+                rating_str = rating_labels.get(raw_sc, f"Score {raw_sc}")
+                psy_detail_rows.append([
+                    Paragraph(str(idx), S('p_num', fontSize=7.5)),
+                    Paragraph(stmt_txt, S('p_stmt', fontSize=7.5, leading=9.5)),
+                    Paragraph(trait_lbl, S('p_trait', fontSize=7.5)),
+                    Paragraph(f"<b>{rating_str}</b>", S('p_rat', fontSize=7.5))
+                ])
+
+            t_psy_detail = Table(psy_detail_rows, colWidths=[20, 315, 100, 100])
+            t_psy_detail.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), SLATE_100),
+                ('GRID', (0, 0), (-1, -1), 0.3, SLATE_200),
+                ('PADDING', (0, 0), (-1, -1), 3.5),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ]))
+            elements.append(t_psy_detail)
+            elements.append(Spacer(1, 10))
+
+    # Complete Verbatim Spoken Transcript & Multi-turn Dialogue Log
+    if transcript:
+        elements.append(Paragraph("Complete Spoken Dialogue & Transcript Audit Log", h2_s))
+        dialogue_rows = [
+            [Paragraph("<b>Speaker</b>", bold_s), Paragraph("<b>Turn Context / Question Type</b>", bold_s), Paragraph("<b>Spoken / Audio Content</b>", bold_s)]
+        ]
+        for t in transcript:
+            speaker_label = "Aria (Interviewer)" if t.get("speaker") == "aria" else "Candidate"
+            speaker_color = "#0284c7" if t.get("speaker") == "aria" else "#4338ca"
+            q_type = (t.get("question_type") or "Spoken Response").replace("_", " ").title()
+            text_content = t.get("text", "")
+            dialogue_rows.append([
+                Paragraph(f"<font color='{speaker_color}'><b>{speaker_label}</b></font>", S('d_spk', fontSize=8)),
+                Paragraph(q_type, S('d_type', fontSize=7.5, textColor=SLATE_700)),
+                Paragraph(text_content, S('d_txt', fontSize=8, leading=10.5))
+            ])
+
+        t_dialogue = Table(dialogue_rows, colWidths=[105, 120, 310])
+        t_dialogue.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), SLATE_100),
+            ('GRID', (0, 0), (-1, -1), 0.3, SLATE_200),
+            ('PADDING', (0, 0), (-1, -1), 4),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        elements.append(t_dialogue)
+        elements.append(Spacer(1, 10))
+
     doc.build(elements)
     buffer.seek(0)
     logger.info(f"✅ Generated 4-segment PDF report for {name} ({sap_id})")
